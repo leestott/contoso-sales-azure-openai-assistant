@@ -7,7 +7,7 @@ from literalai.helper import utc_now
 
 
 class EventHandler(AsyncAssistantEventHandler):
-    def __init__(self, async_openai_client, assistant_name: str, function_map: dict, content: str, set_call_id) -> None:
+    def __init__(self, async_openai_client, assistant_name: str, function_map: dict, content: str) -> None:
         super().__init__()
         self.current_message: cl.Message = None
         self.current_step: cl.Step = None
@@ -15,11 +15,13 @@ class EventHandler(AsyncAssistantEventHandler):
         self.assistant_name = assistant_name
         self.function_map = function_map
         self.content = content
-        self.set_call_id = set_call_id
         self.async_openai_client = async_openai_client
         self.tool_calls = []  # List to track tool call IDs
         self.accumulated_arguments = ""
         self.set_call_id(None)
+
+    def set_call_id(self, status):
+        cl.user_session.set("status", status)
 
     @override
     async def on_text_created(self, text) -> None:
