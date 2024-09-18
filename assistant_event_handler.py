@@ -92,25 +92,25 @@ class EventHandler(AsyncAssistantEventHandler):
             await self.current_step.stream_token(result[1])
 
             # create the tool output to be added to the thread
-            tool_outputs.append({"tool_call_id": tool_call.id, "output": result[1]})
+            output = f"Called function: {tool_call.function.name}({arguments})\nreturned: {result[1]}"
+
+            tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
+
+            print(f"Tool Call Function: {tool_call.function.name}")
+            print(f"Tool Call Arguments: {tool_call.function.arguments}")
+
+            await self.async_openai_client.beta.threads.runs.submit_tool_outputs(
+                thread_id=self.current_run.thread_id,
+                run_id=self.current_run.id,
+                tool_outputs=tool_outputs,
+            )
+
+            # Poll for the tool submit_tool_outputs call to finish
+            await self.async_openai_client.beta.threads.runs.poll(
+                run_id=self.current_run.id, thread_id=self.current_run.thread_id, timeout=60
+            )
 
             self.set_call_id(tool_call.id)
-
-        for tool_call in self.tool_calls:
-            if tool_call.type == "function":
-                print(f"Tool Call Function: {tool_call.function.name}")
-                print(f"Tool Call Arguments: {tool_call.function.arguments}")
-
-                await self.async_openai_client.beta.threads.runs.submit_tool_outputs(
-                    thread_id=self.current_run.thread_id,
-                    run_id=self.current_run.id,
-                    tool_outputs=tool_outputs,
-                )
-
-                # Poll for the tool submit_tool_outputs call to finish
-                await self.async_openai_client.beta.threads.runs.poll(
-                    run_id=self.current_run.id, thread_id=self.current_run.thread_id, timeout=60
-                )
 
         self.current_step.end = utc_now()
         await self.current_step.update()

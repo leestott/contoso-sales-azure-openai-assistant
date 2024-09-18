@@ -41,7 +41,7 @@ class SalesData:
             data = pd.read_sql_query(query, self.conn)
             if data.empty:
                 results.append(f"Query: {query}\n\n")
-                results.append("No results found.")
+                results.append(f"No results found for query {query}.")
                 return results
             results.append(f"Query: {query}\n\n")
             table = data.to_string(index=False)

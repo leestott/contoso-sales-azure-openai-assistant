@@ -9,16 +9,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ENDPOINT_URL = os.environ.get("ENDPOINT_URL")
-API_KEY = os.environ.get("API_KEY")
-API_VERSION = os.environ.get("API_VERSION")
+AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
+AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION")
 OPENAI_ASSISTANT_ID = os.environ.get("OPENAI_ASSISTANT_ID")
-DEPLOYMENT_NAME = os.getenv("OPENAI_GPT_DEPLOYMENT")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 
 
 sales_data = SalesData()
-
-
 
 
 def initialize():
@@ -29,27 +27,21 @@ def initialize():
 
     instructions = (
         "You are an advanced sales analysis assistant for Contoso. Your role is to be polite, professional, helpful, and friendly while assisting users with their sales data inquiries.",
-        "You get all the sales data from this app using the functions provided. This data includes sales revenue categorized by region, product category, product type, and broken down by year and month.",
+        "You get all the sales data from the ask_database function tool provided.",
         "This is the sqlite sales data structure:{database_schema_string}.",
-        # "- Regions: Africa, Asia, Europe, America",
-        # "- Product Categories: Climbing gear, Camping equipment, Apparel, etc.",
-        # "- Product Types: Jackets, Hammocks, Wetsuits, Crampons, Shoes, etc.",
-        # "- Months: 2023-01, 2023-08, 2024-02, etc.",
-        # "- Revenue: Numeric values representing the sales revenue.",
-        # "- Discounts: Numeric values representing the discounts applied to the sales.",
-        # "- Shipping Costs: Numeric values representing the shipping costs.",
-        # "- Net Revenue: you can calculate user revenue, discount and shipping cost",
         "Your responsibilities include the following:",
         "- Analyze and provide insights based on the available sales data.",
-        "- Generate visualizations that help illustrate the data trends.",
+        # "- Always create charts and visualizations based on the data provided by calling the openai Code Interpreter tool to illustrate the data trends.",
         "- If a question is not related to sales or is outside your scope, respond with 'I'm unable to assist with that. Please contact IT for more assistance.'",
         "- If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer.",
         "- If the user is angry or insulting, remain calm and professional. Respond with, 'I'm here to help you. Let's focus on your sales data inquiries. If you need further assistance, please contact IT for support.'",
         # "- Unless asked, default to formatting your responses as a table.",
         "- Don't offer download links for the data.",
+        # "- Don't use existing visualizations or charts.",
         # "- Don't provide code snippets or code download links, use for code interpreter only.",
-        "- Always use the code interpreter tool to generate charts or visualizations or perform complex calculations.",
-        "Remember to maintain a professional and courteous tone throughout your interactions. Avoid sharing any sensitive or confidential information.",
+        "- Don't use existing visualizations or charts from the model.",
+        "- Always generate charts, visualizations with the code interpreter.",
+        "- Remember to maintain a professional and courteous tone throughout your interactions.",
     )
 
     tools_list = [
@@ -80,14 +72,14 @@ def initialize():
     ]
 
     sync_openai_client = AzureOpenAI(
-        azure_endpoint=ENDPOINT_URL,
-        api_key=API_KEY,
-        api_version=API_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_KEY,
+        api_version=AZURE_OPENAI_API_VERSION,
     )
 
     return sync_openai_client.beta.assistants.create(
         name="Portfolio Management Assistant",
-        model=DEPLOYMENT_NAME,
+        model=AZURE_OPENAI_DEPLOYMENT,
         instructions=str(instructions),
         tools=tools_list,
     )
@@ -109,9 +101,9 @@ function_map: Dict[str, Callable[[Any], str]] = {
 async def start_chat():
 
     async_openai_client = AsyncAzureOpenAI(
-        azure_endpoint=ENDPOINT_URL,
-        api_key=API_KEY,
-        api_version=API_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_KEY,
+        api_version=AZURE_OPENAI_API_VERSION,
     )
 
     # Create a Thread
@@ -137,13 +129,14 @@ async def main(message: cl.Message):
     thread_id = cl.user_session.get("thread_id")
     MAX = 5
     conversation_count = 0
-    async_openai_client = cl.user_session.get("openai-client")
+    
 
     # attachments = await process_files(message.elements)
 
     while conversation_count < MAX:
         conversation_count += 1
 
+        async_openai_client = cl.user_session.get("openai-client")
         status = cl.user_session.get("status")
 
         # Add a Message to the Thread
