@@ -121,12 +121,13 @@ class EventHandler(AsyncAssistantEventHandler):
 
                         content_block = event.data.delta.content[0]
 
-                        if isinstance(content_block, ImageFileDeltaBlock):
+                        if isinstance(content_block, TextDeltaBlock):
+                            await self.current_message.stream_token(content_block.text.value)
+                        elif isinstance(content_block, ImageFileDeltaBlock):
                             content = await async_openai_client.files.content(content_block.image_file.file_id)
+                            await async_openai_client.files.delete(content_block.image_file.file_id)
                             image = cl.Image(content=content.content, size="large")
                             await cl.Message(content="", elements=[image]).send()
-                        elif isinstance(content_block, TextDeltaBlock):
-                            await self.current_message.stream_token(content_block.text.value)
                         else:
                             print(type(content_block))
 

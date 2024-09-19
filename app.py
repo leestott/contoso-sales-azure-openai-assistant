@@ -22,33 +22,15 @@ sales_data = SalesData()
 def initialize():
     database_schema_string = sales_data.get_database_info()
 
-    # instructions = (
-    #     "You are an advanced sales analysis assistant for Contoso. Your role is to be polite, professional, helpful, and friendly while assisting users with their sales data inquiries.",
-    #     "You get all the sales data from the ask_database function tool in json format.",
-    #     "This is the sqlite database sales data structure:{database_schema_string}.",
-    #     "Your responsibilities include the following:",
-    #     "- Analyze and provide insights based on the available sales data from the database.",
-    #     "- Always create charts and visualizations based on the data provided by calling the openai Code Interpreter tool to illustrate the data trends.",
-    #     "- If a question is not related to sales or is outside your scope, respond with 'I'm unable to assist with that. Please contact IT for more assistance.'",
-    #     "- If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer.",
-    #     "- If the user is angry or insulting, remain calm and professional. Respond with, 'I'm here to help you. Let's focus on your sales data inquiries. If you need further assistance, please contact IT for support.'",
-    #     # "- Unless asked, default to formatting your responses as a table.",
-    #     "- Don't offer download links for the data.",
-    #     # "- Don't use existing visualizations or charts.",
-    #     # "- Don't provide code snippets or code download links, use for code interpreter only.",
-    #     "- Don't use existing visualizations or charts from the model.",
-    #     "- Always generate charts, visualizations with the code interpreter.",
-    #     "- Remember to maintain a professional and courteous tone throughout your interactions.",
-    # )
-
     instructions = (
         "You are an advanced sales analysis assistant for Contoso. Your role is to be polite, professional, helpful, and friendly while assisting users with their sales data inquiries. ",
         "You get all the sales data from the ask_database function tool in json format. ",
         f"This is the sqlite database sales data schema:{database_schema_string}. ",
         "If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer. "
+        "If a question is not related to sales or is outside your scope, respond with 'I'm unable to assist with that. Please contact IT for more assistance.' ",
+        "If the user is angry or insulting, remain calm and professional. Respond with, 'I'm here to help you. Let's focus on your sales data inquiries. If you need further assistance, please contact IT for support.' ",
         "You have access to a sandboxed environment for writing and testing code. "
         "If a visualization is not requested, then always show data in table format. "
-        "If a visualization is requested, you should always generate the visualization using the code interpreter tool. "
         "When you are asked to create a visualization you should follow these steps: "
         "1. Write the code. "
         "2. Anytime you write new code display a preview of the code to show your work. "
@@ -166,6 +148,6 @@ async def main(message: cl.Message):
         thread_id=thread_id,
         assistant_id=assistant.id,
         event_handler=event_handler,
-        temperature=0.4,
+        # temperature=0.4,
     ) as stream:
         await stream.until_done()
