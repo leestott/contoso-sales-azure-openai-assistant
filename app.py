@@ -1,11 +1,13 @@
 import os
 from typing import Any, Callable, Dict
+
 import chainlit as cl
 from chainlit.config import config
 from openai import AsyncAzureOpenAI, AzureOpenAI
+from dotenv import load_dotenv
+
 from assistant_event_handler import EventHandler
 from sales_data import SalesData
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -29,6 +31,7 @@ def initialize():
         "If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer. "
         "If a question is not related to sales or is outside your scope, respond with 'I'm unable to assist with that. Please contact IT for more assistance.' ",
         "If the user is angry or insulting, remain calm and professional. Respond with, 'I'm here to help you. Let's focus on your sales data inquiries. If you need further assistance, please contact IT for support.' ",
+        "Don't show any code to the user. ",
         "You have access to a sandboxed environment for writing and testing code. "
         "If a visualization is not requested, then always show data in table format. "
         "When you are asked to create a visualization you should follow these steps: "
@@ -38,8 +41,6 @@ def initialize():
         "4. If the code is successful display the visualization. "
         "5. If the code is unsuccessful display the error message and try to revise the code and rerun going through the steps from above again. ",
     )
-
-    print(str(instructions))
 
     tools_list = [
         {"type": "code_interpreter"},
@@ -90,7 +91,6 @@ config.ui.name = assistant.name
 
 function_map: Dict[str, Callable[[Any], str]] = {
     "ask_database": lambda args: sales_data.ask_database(query=args.get("query")),
-    # "get_sales_by_month": lambda args: get_sales_by_month(args.get("region")),
 }
 
 
@@ -103,7 +103,6 @@ async def start_chat():
         api_version=AZURE_OPENAI_API_VERSION,
     )
 
-    # Create a Thread
     thread = await async_openai_client.beta.threads.create()
 
     # Update session state
@@ -135,7 +134,6 @@ async def main(message: cl.Message):
         thread_id=thread_id,
         role="user",
         content=message.content,
-        # attachments=attachments,
     )
 
     event_handler = EventHandler(
@@ -148,6 +146,5 @@ async def main(message: cl.Message):
         thread_id=thread_id,
         assistant_id=assistant.id,
         event_handler=event_handler,
-        # temperature=0.4,
     ) as stream:
         await stream.until_done()

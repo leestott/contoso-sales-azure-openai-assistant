@@ -3,7 +3,8 @@ from typing_extensions import override
 from openai import AsyncAssistantEventHandler
 import openai
 from openai.types.beta.assistant_stream_event import ThreadMessageDelta
-from openai.types.beta.threads import ImageFileContentBlock, TextDeltaBlock, ImageFileDeltaBlock
+from openai.types.beta.threads.runs.function_tool_call import FunctionToolCall
+from openai.types.beta.threads import TextDeltaBlock, ImageFileDeltaBlock
 import chainlit as cl
 from literalai.helper import utc_now
 
@@ -17,31 +18,21 @@ class EventHandler(AsyncAssistantEventHandler):
         self.assistant_name = assistant_name
         self.function_map = function_map
 
-    # @override
-    # def on_event(self, event):
-    #     print(f"Event: {event}")
-
-    def set_call_id(self, status):
-        cl.user_session.set("status", status)
-
     @override
-    async def on_text_created(self, text) -> None:
+    async def on_text_created(self: "EventHandler", text) -> None:
         self.current_message = await cl.Message(author=self.assistant_name, content="").send()
 
     @override
-    async def on_text_delta(self, delta, snapshot):
+    async def on_text_delta(self: "EventHandler", delta, snapshot):
         if delta.value:
             await self.current_message.stream_token(delta.value)
 
     @override
-    async def on_text_done(self, text):
+    async def on_text_done(self: "EventHandler", text: str) -> None:
         await self.current_message.update()
 
     @override
-    async def on_tool_call_created(
-        self,
-        tool_call: openai.types.beta.threads.runs.function_tool_call.FunctionToolCall,
-    ):
+    async def on_tool_call_created(self: "EventHandler", tool_call: FunctionToolCall) -> None:
         self.current_tool_call = tool_call.id
         self.current_step = cl.Step(name=tool_call.type, type="tool")
         self.current_step.language = "python"
@@ -71,21 +62,25 @@ class EventHandler(AsyncAssistantEventHandler):
                         error_step.end = utc_now()
                         await error_step.send()
 
+    async def on_image_file_done(self, image_file):
+        async_openai_client = cl.user_session.get("openai-client")
+        image_id = image_file.file_id
+        response = await async_openai_client.files.with_raw_response.content(image_id)
+        image_element = cl.Image(name=image_id, content=response.content, display="inline", size="large")
+        if not self.current_message.elements:
+            self.current_message.elements = []
+        self.current_message.elements.append(image_element)
+        await self.current_message.update()
+
     @override
     async def on_tool_call_done(
         self, tool_call: openai.types.beta.threads.runs.function_tool_call.FunctionToolCall
     ) -> None:
         tool_outputs = []
-        self.set_call_id(None)
-
-        print(f"Tool Call Done: {tool_call.id}")
 
         async_openai_client = cl.user_session.get("openai-client")
-        if async_openai_client is None:
-            print("No OpenAI client found in user session")
 
         if tool_call.type == "function":
-            # self.set_call_id(tool_call.id, None)
 
             function = self.function_map.get(tool_call.function.name)
             arguments = json.loads(tool_call.function.arguments)
@@ -98,17 +93,9 @@ class EventHandler(AsyncAssistantEventHandler):
             await self.current_step.stream_token(result[0])
             await self.current_step.stream_token(result[1])
 
-            output = result[1]
-
-            tool_outputs.append({"tool_call_id": tool_call.id, "output": result[1]})
-
-            print(f"Tool Call Function: {tool_call.function.name}")
-            print(f"Tool Call Arguments: {tool_call.function.arguments}")
-            print(f"Tool Call Output: {output}")
-
             try:
-
                 self.current_message = await cl.Message(author=self.assistant_name, content="").send()
+                tool_outputs.append({"tool_call_id": tool_call.id, "output": result[1]})
 
                 async with async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
@@ -133,29 +120,8 @@ class EventHandler(AsyncAssistantEventHandler):
 
                     await self.current_message.update()
 
-                messages = async_openai_client.beta.threads.messages.list(thread_id=self.current_run.thread_id)
-
-                print("+++Event Handler Messages start block++++")
-                async for msg in messages:
-                    for content_item in msg.content:
-                        if isinstance(content_item, ImageFileContentBlock):
-                            print("content is an image")
-                        else:
-                            print(content_item.text.value)
-
-                self.set_call_id(tool_call.id)
             except openai.error.OpenAIError as e:
                 print(f"Error submitting tool outputs: {e}")
 
         self.current_step.end = utc_now()
         await self.current_step.update()
-
-    async def on_image_file_done(self, image_file):
-        async_openai_client = cl.user_session.get("openai-client")
-        image_id = image_file.file_id
-        response = await async_openai_client.files.with_raw_response.content(image_id)
-        image_element = cl.Image(name=image_id, content=response.content, display="inline", size="large")
-        if not self.current_message.elements:
-            self.current_message.elements = []
-        self.current_message.elements.append(image_element)
-        await self.current_message.update()
