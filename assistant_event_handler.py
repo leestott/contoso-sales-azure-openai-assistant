@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing_extensions import override
 from openai import AsyncAssistantEventHandler
@@ -15,7 +16,9 @@ class EventHandler(AsyncAssistantEventHandler):
         self.assistant_name = assistant_name
         self.function_map = function_map
         self.content = content
-        self.async_openai_client = async_openai_client
+        self.async_openai_client = cl.user_session.get("openai-client")
+        if not self.async_openai_client:
+            print("No OpenAI client found in user session")
         self.tool_calls = []  # List to track tool call IDs
         self.accumulated_arguments = ""
         self.set_call_id(None)
@@ -71,13 +74,37 @@ class EventHandler(AsyncAssistantEventHandler):
                         error_step.end = utc_now()
                         await error_step.send()
 
+    async def is_run_active(self,thread_id: str, run_id: str) -> bool:
+        try:
+            # Fetch the run's status
+            run_status = await self.async_openai_client.beta.threads.runs.retrieve(thread_id, run_id)
+            return run_status['status'] == 'active'
+        except openai.error.OpenAIError as e:
+            print(f"Error checking run status: {e}")
+            return False
+
+    async def wait_for_run_completion(self, thread_id: str, run_id: str, check_interval: int = 5):
+        # Poll the run status every few seconds
+        while await self.is_run_active(thread_id, run_id):
+            print(f"Run {run_id} is still active. Waiting...")
+            await asyncio.sleep(check_interval)
+        
+        print(f"Run {run_id} has completed.")
+    
     @override
     async def on_tool_call_done(
         self, tool_call: openai.types.beta.threads.runs.function_tool_call.FunctionToolCall
     ) -> None:
         tool_outputs = []
+        self.set_call_id(None)
 
-        if tool_call.type == "function" and self.current_run.status == "requires_action":
+        print(f"Tool Call Done: {tool_call.id}")
+
+        async_openai_client = cl.user_session.get("openai-client")
+        if async_openai_client is None:
+            print("No OpenAI client found in user session")
+
+        if tool_call.type == "function":
             # self.set_call_id(tool_call.id, None)
 
             function = self.function_map.get(tool_call.function.name)
@@ -92,25 +119,36 @@ class EventHandler(AsyncAssistantEventHandler):
             await self.current_step.stream_token(result[1])
 
             # create the tool output to be added to the thread
-            output = f"Called function: {tool_call.function.name}({arguments})\nreturned: {result[1]}"
+            # output = f"Called function: {tool_call.function.name}({arguments})\nreturned: {result[1]}"
+            output = result[1]
 
-            tool_outputs.append({"tool_call_id": tool_call.id, "output": output})
+            tool_outputs.append({"tool_call_id": tool_call.id, "output": result[1]})
 
             print(f"Tool Call Function: {tool_call.function.name}")
             print(f"Tool Call Arguments: {tool_call.function.arguments}")
+            print(f"Tool Call Output: {output}")
 
-            await self.async_openai_client.beta.threads.runs.submit_tool_outputs(
-                thread_id=self.current_run.thread_id,
-                run_id=self.current_run.id,
-                tool_outputs=tool_outputs,
-            )
+            try:
+                await async_openai_client.beta.threads.runs.submit_tool_outputs(
+                    thread_id=self.current_run.thread_id,
+                    run_id=self.current_run.id,
+                    tool_outputs=tool_outputs,
+                )
 
-            # Poll for the tool submit_tool_outputs call to finish
-            await self.async_openai_client.beta.threads.runs.poll(
-                run_id=self.current_run.id, thread_id=self.current_run.thread_id, timeout=60
-            )
+                # Poll for the tool submit_tool_outputs call to finish
+                while True:
+                    result = await async_openai_client.beta.threads.runs.poll(
+                        run_id=self.current_run.id, thread_id=self.current_run.thread_id, timeout=20
+                    )
+                    if result.status == "completed":
+                        break
+                    print(f"Tool Call Done: {tool_call.id} - {result.status}")
+                    cl.Message(content=f"Tool Call Done: {tool_call.id} - {result.status}").send()
+                    await asyncio.sleep(2)
 
-            self.set_call_id(tool_call.id)
+                self.set_call_id(tool_call.id)
+            except openai.error.OpenAIError as e:
+                print(f"Error submitting tool outputs: {e}")
 
         self.current_step.end = utc_now()
         await self.current_step.update()
