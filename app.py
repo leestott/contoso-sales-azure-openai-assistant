@@ -22,7 +22,6 @@ sales_data = SalesData()
 def initialize():
     database_schema_string = sales_data.get_database_info()
 
-
     # instructions = (
     #     "You are an advanced sales analysis assistant for Contoso. Your role is to be polite, professional, helpful, and friendly while assisting users with their sales data inquiries.",
     #     "You get all the sales data from the ask_database function tool in json format.",
@@ -48,15 +47,14 @@ def initialize():
         f"This is the sqlite database sales data schema:{database_schema_string}. ",
         "If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer. "
         "You have access to a sandboxed environment for writing and testing code. "
-        "If a visualization is not requested, then default to showing data in table format. "
+        "If a visualization is not requested, then always show data in table format. "
         "If a visualization is requested, you should always generate the visualization using the code interpreter tool. "
         "When you are asked to create a visualization you should follow these steps: "
         "1. Write the code. "
         "2. Anytime you write new code display a preview of the code to show your work. "
         "3. Run the code to confirm that it runs. "
         "4. If the code is successful display the visualization. "
-        "5. If the code is unsuccessful display the error message and try to revise the code and rerun going through the steps from above again. "
-        ,
+        "5. If the code is unsuccessful display the error message and try to revise the code and rerun going through the steps from above again. ",
     )
 
     print(str(instructions))
@@ -73,7 +71,7 @@ def initialize():
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": """
+                            "description": f"""
                                     SQLite query extracting info to answer the user's question.
                                     SQLite should be written using this database schema:
                                     {database_schema_string}
@@ -148,42 +146,26 @@ async def end_chat():
 @cl.on_message
 async def main(message: cl.Message):
     thread_id = cl.user_session.get("thread_id")
-    MAX = 5
-    conversation_count = 0
+    async_openai_client = cl.user_session.get("openai-client")
 
-    # attachments = await process_files(message.elements)
+    # Add a Message to the Thread
+    await async_openai_client.beta.threads.messages.create(
+        thread_id=thread_id,
+        role="user",
+        content=message.content,
+        # attachments=attachments,
+    )
 
-    while conversation_count < MAX:
-        conversation_count += 1
+    event_handler = EventHandler(
+        function_map=function_map,
+        assistant_name=assistant.name,
+    )
 
-        async_openai_client = cl.user_session.get("openai-client")
-        status = cl.user_session.get("status")
-
-        # Add a Message to the Thread
-        await async_openai_client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role="user",
-            content=message.content,
-            # attachments=attachments,
-        )
-
-        event_handler = EventHandler(
-            async_openai_client=async_openai_client,
-            assistant_name=assistant.name,
-            function_map=function_map,
-            content=message.content,
-        )
-
-        # Create and Stream a Run
-        async with async_openai_client.beta.threads.runs.stream(
-            thread_id=thread_id,
-            assistant_id=assistant.id,
-            event_handler=event_handler,
-            temperature=0.2,
-        ) as stream:
-            await stream.until_done()
-
-        status = cl.user_session.get("status")
-
-        if status is None:
-            break
+    # Create and Stream a Run
+    async with async_openai_client.beta.threads.runs.stream(
+        thread_id=thread_id,
+        assistant_id=assistant.id,
+        event_handler=event_handler,
+        temperature=0.4,
+    ) as stream:
+        await stream.until_done()
