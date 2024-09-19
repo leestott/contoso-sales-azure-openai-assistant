@@ -54,13 +54,7 @@ class EventHandler(AsyncAssistantEventHandler):
             if delta.code_interpreter.outputs:
                 for output in delta.code_interpreter.outputs:
                     if output.type == "logs":
-                        error_step = cl.Step(name=delta.type, type="tool")
-                        error_step.is_error = True
-                        error_step.output = output.logs
-                        error_step.language = "markdown"
-                        error_step.start = self.current_step.start
-                        error_step.end = utc_now()
-                        await error_step.send()
+                        pass
 
     async def on_image_file_done(self, image_file):
         async_openai_client = cl.user_session.get("openai-client")
@@ -72,10 +66,24 @@ class EventHandler(AsyncAssistantEventHandler):
         self.current_message.elements.append(image_element)
         await self.current_message.update()
 
+    async def process_event(self, async_openai_client, event):
+        if not isinstance(event, ThreadMessageDelta):
+            return
+
+        content_block = event.data.delta.content[0]
+
+        if isinstance(content_block, TextDeltaBlock):
+            await self.current_message.stream_token(content_block.text.value)
+        elif isinstance(content_block, ImageFileDeltaBlock):
+            content = await async_openai_client.files.content(content_block.image_file.file_id)
+            await async_openai_client.files.delete(content_block.image_file.file_id)
+            image = cl.Image(content=content.content, display="inline", size="large")
+            await cl.Message(content="", elements=[image]).send()
+        else:
+            print(type(content_block))
+
     @override
-    async def on_tool_call_done(
-        self, tool_call: openai.types.beta.threads.runs.function_tool_call.FunctionToolCall
-    ) -> None:
+    async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
         tool_outputs = []
 
         async_openai_client = cl.user_session.get("openai-client")
@@ -103,20 +111,7 @@ class EventHandler(AsyncAssistantEventHandler):
                     tool_outputs=tool_outputs,
                 ) as stream:
                     async for event in stream:
-                        if not isinstance(event, ThreadMessageDelta):
-                            continue
-
-                        content_block = event.data.delta.content[0]
-
-                        if isinstance(content_block, TextDeltaBlock):
-                            await self.current_message.stream_token(content_block.text.value)
-                        elif isinstance(content_block, ImageFileDeltaBlock):
-                            content = await async_openai_client.files.content(content_block.image_file.file_id)
-                            await async_openai_client.files.delete(content_block.image_file.file_id)
-                            image = cl.Image(content=content.content, size="large")
-                            await cl.Message(content="", elements=[image]).send()
-                        else:
-                            print(type(content_block))
+                        await self.process_event(async_openai_client, event)
 
                     await self.current_message.update()
 
