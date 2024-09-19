@@ -84,12 +84,10 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
-        tool_outputs = []
-
         async_openai_client = cl.user_session.get("openai-client")
 
         if tool_call.type == "function":
-
+            tool_outputs = []
             function = self.function_map.get(tool_call.function.name)
             arguments = json.loads(tool_call.function.arguments)
 

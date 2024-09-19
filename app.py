@@ -34,8 +34,9 @@ def initialize():
         "Don't show any code to the user. ",
         "You have access to a sandboxed environment for writing and testing code. "
         "If a visualization is not requested, then always show data in table format. "
+        # "Use the language of the user. ",
         "When you are asked to create a visualization you should follow these steps: "
-        "1. Write the code. "
+        "1. Write the code and use the language of the user for labels. "
         "2. Anytime you write new code display a preview of the code to show your work. "
         "3. Run the code to confirm that it runs. "
         "4. If the code is successful display the visualization. "
@@ -146,5 +147,6 @@ async def main(message: cl.Message):
         thread_id=thread_id,
         assistant_id=assistant.id,
         event_handler=event_handler,
+        parallel_tool_calls=False  # Disable parallel tool calls
     ) as stream:
         await stream.until_done()
