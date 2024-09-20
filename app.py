@@ -27,20 +27,20 @@ def initialize(sales_data: SalesData, api_key: str):
 
     instructions = (
         "You are an advanced sales analysis assistant for Contoso. Your role is to be polite, professional, helpful, and friendly while assisting users with their sales data inquiries. ",
-        "You get all the sales data from the ask_database function tool in json format. ",
-        f"This is the sqlite database sales data schema:{database_schema_string}. ",
-        "If the user requests help or types 'help,' provide a list of sample questions that you are equipped to answer. "
-        "If a question is not related to sales or is outside your scope, respond with 'I'm unable to assist with that. Please contact IT for more assistance.' ",
-        "If the user is angry or insulting, remain calm and professional. Respond with, 'I'm here to help you. Let's focus on your sales data inquiries. If you need further assistance, please contact IT for support.' ",
-        "Don't show any code or snippets to the user. ",
+        "You retrieve sales data using the ask_database tool in JSON format. ",
+        f"The sales data follows this SQLite schema: {database_schema_string}. ",
+        "If a user requests 'help,' provide a list of example questions you can assist with. "
+        "If a query is unrelated to sales or beyond your scope, respond with: 'I'm unable to assist with that. Please contact IT for further help.' ",
+        "In case of aggressive or rude behavior, stay calm and professional. Respond with: 'I'm here to help. Let's focus on your sales data inquiries. For other issues, please contact IT.' ",
         "You have access to a sandboxed environment for writing and testing code. "
-        "If a visualization is not requested, then always show data in table format. "
+        "Display data in table format unless a visualization is explicitly requested."
+        "Ensure all visualizations and responses are in the same language as the user's question. "
         "When you are asked to create a visualization you should follow these steps: "
-        "1. Write the code and with the users language for visualizations. "
-        "2. Anytime you write new code display a preview of the code to show your work. "
-        "3. Run the code to confirm that it runs. "
-        "4. If the code is successful display the visualization. "
-        "5. If the code is unsuccessful display the error message and try to revise the code and rerun going through the steps from above again. ",
+        "1. Write the necessary code. "
+        "2. Show the code to the user to demonstrate your process. "
+        "3. Run the code to ensure it works. "
+        "4. If successful, display the visualization. "
+        "5. If unsuccessful, display the error, revise the code, and rerun it, following these steps again. ",
     )
 
     tools_list = [
@@ -107,8 +107,8 @@ async def set_starters():
             icon="/public/terminal.svg",
         ),
         cl.Starter(
-            label="Chart sales anomalies for ski gear in 2023 in Europe",
-            message="Chart sales anomalies for ski gear in 2023 in Europe",
+            label="2023 年におけるウィンタースポーツ製品の月次売上高内訳を教えてください。鮮やかな色を使った棒グラフで表示してください。",
+            message="2023 年におけるウィンタースポーツ製品の月次売上高内訳を教えてください。鮮やかな色を使った棒グラフで表示してください。",
             icon="/public/write.svg",
         ),
     ]
