@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing_extensions import override
 from openai import AsyncAssistantEventHandler
@@ -85,6 +86,7 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
+        MAX_RETRIES = 5 
         async_openai_client = cl.user_session.get("openai-client")
 
         if tool_call.type == "function":
@@ -107,11 +109,23 @@ class EventHandler(AsyncAssistantEventHandler):
                     thread_id=self.current_run.thread_id,
                     run_id=self.current_run.id,
                     tool_outputs=tool_outputs,
+                    timeout=90,
                 ) as stream:
                     async for event in stream:
                         await self.process_event(async_openai_client, event)
 
                     await self.current_message.update()
+
+                for _ in range(MAX_RETRIES):
+                    result = await async_openai_client.beta.threads.runs.retrieve(
+                        thread_id=self.current_run.thread_id,
+                        run_id=self.current_run.id,
+                    )
+                    if result.status == "completed":
+                        break
+                    await asyncio.sleep(1)
+                else:
+                    raise TimeoutError("The operation took too long and was not completed within the maximum retries.")
 
             except openai.error.OpenAIError as e:
                 print(f"Error submitting tool outputs: {e}")
