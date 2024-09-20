@@ -46,6 +46,13 @@ class SalesData:
         # convert list of tuples to list of strings
         product_categories = [product_category[0] for product_category in product_categories]
         return product_categories
+    
+    def __get_reporting_years(self: "SalesData"):
+        """Return a list of unique reporting years in the database."""
+        reporting_years = self.conn.execute("SELECT DISTINCT year FROM sales_data ORDER BY year;").fetchall()
+        # convert list of tuples to list of strings
+        reporting_years = [reporting_year[0] for reporting_year in reporting_years]
+        return reporting_years
 
     def get_database_info(self: "SalesData") -> str:
         """Return a list of dicts containing the table name and columns for each table in the database."""
@@ -60,10 +67,12 @@ class SalesData:
         regions = self.__get_regions()
         product_types = self.__get_product_types()
         product_categories = self.__get_product_categories()
+        reporting_years = self.__get_reporting_years()
 
         database_info += f"\nRegions: {', '.join(regions)}"
         database_info += f"\nProduct Types: {', '.join(product_types)}"
         database_info += f"\nProduct Categories: {', '.join(product_categories)}"
+        database_info += f"\nReporting Years: {', '.join([str(year) for year in reporting_years])}"
         database_info += "\n\n"
 
         return database_info
