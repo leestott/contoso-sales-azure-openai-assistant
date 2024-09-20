@@ -1,8 +1,14 @@
 import sqlite3
 import pandas as pd
 import json
+from pydantic import BaseModel
 
 DATA_BASE = "./database/contoso-sales.db"
+
+
+class QueryResults(BaseModel):
+    display_format: str = ""
+    json_format: str = ""
 
 
 class SalesData:
@@ -25,28 +31,28 @@ class SalesData:
         for col in columns:
             column_info.append(f"{col[1]}: {col[2]}")  # col[1] is the column name, col[2] is the column type
         return column_info
-    
+
     def __get_regions(self: "SalesData"):
         """Return a list of unique regions in the database."""
         regions = self.conn.execute("SELECT DISTINCT region FROM sales_data;").fetchall()
         # convert list of tuples to list of strings
         regions = [region[0] for region in regions]
         return regions
-    
+
     def __get_product_types(self: "SalesData"):
         """Return a list of unique product types in the database."""
         product_types = self.conn.execute("SELECT DISTINCT product_type FROM sales_data;").fetchall()
         # convert list of tuples to list of strings
         product_types = [product_type[0] for product_type in product_types]
         return product_types
-    
+
     def __get_product_categories(self: "SalesData"):
         """Return a list of unique product categories in the database."""
         product_categories = self.conn.execute("SELECT DISTINCT main_category FROM sales_data;").fetchall()
         # convert list of tuples to list of strings
         product_categories = [product_category[0] for product_category in product_categories]
         return product_categories
-    
+
     def __get_reporting_years(self: "SalesData"):
         """Return a list of unique reporting years in the database."""
         reporting_years = self.conn.execute("SELECT DISTINCT year FROM sales_data ORDER BY year;").fetchall()
@@ -62,7 +68,10 @@ class SalesData:
             table_dicts.append({"table_name": table_name, "column_names": columns_names})
         # return table_dicts
         database_info = "\n".join(
-            [f"Table {table['table_name']} Schema: Columns: {', '.join(table['column_names'])}" for table in table_dicts]
+            [
+                f"Table {table['table_name']} Schema: Columns: {', '.join(table['column_names'])}"
+                for table in table_dicts
+            ]
         )
         regions = self.__get_regions()
         product_types = self.__get_product_types()
@@ -77,22 +86,24 @@ class SalesData:
 
         return database_info
 
-    def ask_database(self: "SalesData", query: str) -> list:
+    def ask_database(self: "SalesData", query: str) -> QueryResults:
         """Function to query SQLite database with a provided SQL query."""
-        results = []
+        # results = []
+
+        data_results = QueryResults()
+        
 
         try:
             data = pd.read_sql_query(query, self.conn)
             if data.empty:
-                results.append(f"Query: {query}\n\n")
-                results.append("The query returned no results. Try a different query. ")
-                return results
-            results.append(f"Query: {query}\n\n")
-            table = json.dumps(data.to_json(index=False, orient='split'))
-            # results.append(f"Query JSON Data: {table}")
-            results.append(table)
+                data_results.display_format = "The query returned no results. Try a different query."
+                data_results.json_format = ""
+                return data_results
+            data_results.display_format = data.to_string()
+            table = json.dumps(data.to_json(index=False, orient="split"))
+            data_results.json_format = table
 
         except Exception as e:
-            results.append(f"Query: {query}")
-            results.append(f"query failed with error: {e}")
-        return results
+            data_results.display_format = f"query failed with error: {e}"
+            data_results.json_format = ""
+        return data_results

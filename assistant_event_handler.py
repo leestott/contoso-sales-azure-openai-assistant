@@ -7,6 +7,7 @@ from openai.types.beta.threads.runs.function_tool_call import FunctionToolCall
 from openai.types.beta.threads import TextDeltaBlock, ImageFileDeltaBlock
 import chainlit as cl
 from literalai.helper import utc_now
+from sales_data import QueryResults
 
 
 class EventHandler(AsyncAssistantEventHandler):
@@ -91,17 +92,16 @@ class EventHandler(AsyncAssistantEventHandler):
             function = self.function_map.get(tool_call.function.name)
             arguments = json.loads(tool_call.function.arguments)
 
-            result = function(arguments)
+            result: QueryResults = function(arguments)
 
             self.current_step.language = "sql"
             await self.current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
             await self.current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
-            await self.current_step.stream_token(result[0])
-            await self.current_step.stream_token(result[1])
+            await self.current_step.stream_token(result.display_format)
 
             try:
                 self.current_message = await cl.Message(author=self.assistant_name, content="").send()
-                tool_outputs.append({"tool_call_id": tool_call.id, "output": result[1]})
+                tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
 
                 async with async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
