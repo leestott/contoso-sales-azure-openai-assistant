@@ -178,7 +178,7 @@ async def start_chat():
 async def end_chat():
     async_openai_client = cl.user_session.get("openai-client")
     thread_id = cl.user_session.get("thread_id")
-    if thread_id:
+    if thread_id and async_openai_client:
         try:
             await async_openai_client.beta.threads.delete(thread_id=thread_id)
         except Exception as e:
