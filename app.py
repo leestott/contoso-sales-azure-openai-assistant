@@ -87,7 +87,6 @@ def initialize(sales_data: SalesData, api_key: str):
     return assistant
 
 
-
 @cl.set_starters
 async def set_starters():
     return [
@@ -175,7 +174,7 @@ async def start_chat():
 
 
 @cl.on_chat_end
-async def end_chat():
+async def end_chat() -> None:
     async_openai_client = cl.user_session.get("openai-client")
     thread_id = cl.user_session.get("thread_id")
     if thread_id and async_openai_client:
@@ -188,9 +187,10 @@ async def end_chat():
 
 
 @cl.on_message
-async def main(message: cl.Message):
+async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
     async_openai_client = cl.user_session.get("openai-client")
+    run_id = None
 
     if not thread_id or not async_openai_client:
         await cl.Message(content="An error occurred. Please try again later.").send()
@@ -216,5 +216,17 @@ async def main(message: cl.Message):
             temperature=0.4,
         ) as stream:
             await stream.until_done()
+
+        run_id = stream.current_run.id  # Assuming stream has a run_id attribute
+        print(f"Run ID: {run_id}")
+
     except Exception as e:
         await cl.Message(content=f"An error occurred: {e}").send()
+        await cl.Message(content="Please try again in a moment.").send()
+    finally:
+        if stream and stream.current_run and stream.current_run.status != "completed":
+            await async_openai_client.beta.threads.runs.cancel(
+                run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+            )
+            print(f"Run cancelled. {stream.current_run.id}")
+            await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()

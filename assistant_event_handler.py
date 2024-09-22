@@ -1,7 +1,6 @@
 import json
 from typing_extensions import override
 from openai import AsyncAssistantEventHandler
-import openai
 from openai.types.beta.assistant_stream_event import ThreadMessageDelta
 from openai.types.beta.threads.runs.function_tool_call import FunctionToolCall
 from openai.types.beta.threads import TextDeltaBlock, ImageFileDeltaBlock
@@ -85,11 +84,10 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
-        MAX_RETRIES = 5 
         async_openai_client = cl.user_session.get("openai-client")
-        status = "requires-action"
+        status = self.current_run.status
 
-        while tool_call.type == "function" and status == "requires-action":
+        while tool_call.type == "function" and status == "requires_action":
             tool_outputs = []
             function = self.function_map.get(tool_call.function.name)
             arguments = json.loads(tool_call.function.arguments)
@@ -101,40 +99,22 @@ class EventHandler(AsyncAssistantEventHandler):
             await self.current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
             await self.current_step.stream_token(result.display_format)
 
-            try:
-                self.current_message = await cl.Message(author=self.assistant_name, content="").send()
-                tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
+            # try:
+            self.current_message = await cl.Message(author=self.assistant_name, content="").send()
+            tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
 
-                async with async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
-                    thread_id=self.current_run.thread_id,
-                    run_id=self.current_run.id,
-                    tool_outputs=tool_outputs,
-                    timeout=90,
-                ) as stream:
-                    async for event in stream:
-                        await self.process_event(async_openai_client, event)
+            async with async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
+                thread_id=self.current_run.thread_id,
+                run_id=self.current_run.id,
+                tool_outputs=tool_outputs,
+                timeout=90,
+            ) as stream:
+                async for event in stream:
+                    await self.process_event(async_openai_client, event)
 
-                    await self.current_message.update()
+                await self.current_message.update()
 
-                # for _ in range(MAX_RETRIES):
-                #     result = await async_openai_client.beta.threads.runs.retrieve(
-                #         thread_id=self.current_run.thread_id,
-                #         run_id=self.current_run.id,
-                #     )
-                #     if result.status == "completed":
-                #         break
-                #     await asyncio.sleep(1)
-                # else:
-                #     raise TimeoutError("The operation took too long and was not completed within the maximum retries.")
-
-                result = await async_openai_client.beta.threads.runs.retrieve(
-                        thread_id=self.current_run.thread_id,
-                        run_id=self.current_run.id,
-                    )
-                status = result.status
-
-            except openai.error.OpenAIError as e:
-                print(f"Error submitting tool outputs: {e}")
+            status = stream.current_run.status
 
         self.current_step.end = utc_now()
         await self.current_step.update()
