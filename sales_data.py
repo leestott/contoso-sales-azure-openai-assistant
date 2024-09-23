@@ -101,5 +101,5 @@ class SalesData:
 
         except Exception as e:
             data_results.display_format = f"query failed with error: {e}"
-            data_results.json_format = ""
+            data_results.json_format = "{" + f'"error": "{e}", "query":"{query}"' + "}"
         return data_results

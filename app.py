@@ -201,6 +201,15 @@ async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
     async_openai_client = cl.user_session.get("openai-client")
 
+    metadata = cl.user_session.get("user").metadata
+    api_key = metadata.get("api_key")
+
+    async_openai_client = AsyncAzureOpenAI(
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=api_key,
+            api_version=AZURE_OPENAI_API_VERSION,
+        )
+
     if not thread_id or not async_openai_client:
         await cl.Message(content="An error occurred. Please try again later.").send()
         return
@@ -220,6 +229,7 @@ async def main(message: cl.Message) -> None:
             event_handler=EventHandler(
                 function_map=function_map,
                 assistant_name=assistant.name,
+                async_openai_client=async_openai_client,
             ),
             parallel_tool_calls=False,  # Disable parallel tool calls
             temperature=0.4,
