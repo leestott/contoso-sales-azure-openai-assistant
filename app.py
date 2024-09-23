@@ -10,7 +10,7 @@ from openai import AsyncAzureOpenAI, AzureOpenAI
 from dotenv import load_dotenv
 import httpx
 
-from assistant_event_handler import EventHandler
+from event_handler import EventHandler
 from sales_data import SalesData
 
 load_dotenv()
