@@ -86,14 +86,15 @@ class EventHandler(AsyncAssistantEventHandler):
                 tool_outputs = []
                 tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
 
-                event_handler = EventHandler(self.function_map, self.assistant_name, self.async_openai_client)
-
                 async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
                     run_id=self.current_run.id,
                     tool_outputs=tool_outputs,
-                    event_handler=event_handler,
-                    timeout=90,
+                    event_handler=EventHandler(
+                        self.function_map,
+                        self.assistant_name,
+                        self.async_openai_client,
+                    ),
                 ) as stream:
                     await stream.until_done()
 
