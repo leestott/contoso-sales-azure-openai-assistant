@@ -83,8 +83,7 @@ class EventHandler(AsyncAssistantEventHandler):
 
                 self.current_message = await cl.Message(author=self.assistant_name, content="").send()
 
-                tool_outputs = []
-                tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
+                tool_outputs = [{"tool_call_id": tool_call.id, "output": result.json_format}]
 
                 async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
