@@ -88,22 +88,22 @@ class EventHandler(AsyncAssistantEventHandler):
         async_openai_client = cl.user_session.get("openai-client")
         status = self.current_run.status
 
-        try:
-            while tool_call.type == "function" and status == "requires_action":
-                tool_outputs = []
-                function = self.function_map.get(tool_call.function.name)
-                arguments = json.loads(tool_call.function.arguments)
+        while tool_call.type == "function" and status == "requires_action":
+            tool_outputs = []
+            function = self.function_map.get(tool_call.function.name)
+            arguments = json.loads(tool_call.function.arguments)
 
-                result: QueryResults = function(arguments)
+            result: QueryResults = function(arguments)
 
-                self.current_step.language = "sql"
-                await self.current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
-                await self.current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
-                await self.current_step.stream_token(result.display_format)
+            self.current_step.language = "sql"
+            await self.current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
+            await self.current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
+            await self.current_step.stream_token(result.display_format)
 
-                self.current_message = await cl.Message(author=self.assistant_name, content="").send()
-                tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
+            self.current_message = await cl.Message(author=self.assistant_name, content="").send()
+            tool_outputs.append({"tool_call_id": tool_call.id, "output": result.json_format})
 
+            try:
                 async with async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
                     run_id=self.current_run.id,
@@ -113,20 +113,21 @@ class EventHandler(AsyncAssistantEventHandler):
                     async for event in stream:
                         await self.process_event(async_openai_client, event)
 
+                await self.current_message.update()
                 status = stream.current_run.status
 
-        # triggered when the user stops a chat
-        except asyncio.exceptions.CancelledError:
-            if stream and stream.current_run and stream.current_run.status != "completed":
-                await async_openai_client.beta.threads.runs.cancel(
-                    run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-                )
-                await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
-        except Exception as e:
-            await cl.Message(content=f"An error occurred: {e}").send()
-            await cl.Message(content="Please try again in a moment.").send()
-        finally:
-            await self.current_message.update()
+            # triggered when the user stops a chat
+            except asyncio.exceptions.CancelledError:
+                if stream and stream.current_run and stream.current_run.status != "completed":
+                    await async_openai_client.beta.threads.runs.cancel(
+                        run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+                    )
+                    await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+                    break
+            except Exception as e:
+                await cl.Message(content=f"An error occurred: {e}").send()
+                await cl.Message(content="Please try again in a moment.").send()
+                break
 
         self.current_step.end = utc_now()
         await self.current_step.update()

@@ -233,7 +233,6 @@ async def main(message: cl.Message) -> None:
                 run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
             )
             await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
-            await cl.Message(content="").update()
 
     except Exception as e:
         await cl.Message(content=f"An error occurred: {e}").send()
