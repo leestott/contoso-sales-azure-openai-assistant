@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from typing import Any, Callable, Dict
@@ -225,21 +226,15 @@ async def main(message: cl.Message) -> None:
         ) as stream:
             await stream.until_done()
 
+    # triggered when the user stops a chat
+    except asyncio.exceptions.CancelledError:
+        if stream and stream.current_run and stream.current_run.status != "completed":
+            await async_openai_client.beta.threads.runs.cancel(
+                run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+            )
+            await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+            await cl.Message(content="").update()
+
     except Exception as e:
         await cl.Message(content=f"An error occurred: {e}").send()
         await cl.Message(content="Please try again in a moment.").send()
-    finally:
-        # look to cancel the run if it's not completed
-        # For example the user has ended the chat
-        if stream and stream.current_run and stream.current_run.status != "completed":
-            try:
-                # Given the async nature of the Assistant REST APIs
-                # It's possible that the run has completed but might be reported as not completed.
-                # This will cause an exception. Just ignore it.
-                await async_openai_client.beta.threads.runs.cancel(
-                    run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-                )
-                print(f"Run cancelled. {stream.current_run.id}")
-                await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
-            except Exception:
-                pass
