@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict
 
 import chainlit as cl
 from chainlit.config import config
+from chainlit.types import ThreadDict
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from dotenv import load_dotenv
 import httpx
@@ -18,6 +19,7 @@ AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION")
 OPENAI_ASSISTANT_ID = os.environ.get("OPENAI_ASSISTANT_ID")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+AZURE_OPENAI_ASSISTANT_ID = os.getenv("AZURE_OPENAI_ASSISTANT_ID")
 
 assistant = None
 
@@ -37,10 +39,10 @@ def initialize(sales_data: SalesData, api_key: str):
         "Ensure all visualizations and responses are in the same language as the user's question. "
         "When you are asked to create a visualization you should follow these steps: "
         "1. Write the necessary code. "
-        "2. Show the code to the user to demonstrate your process. "
-        "3. Run the code to ensure it works. "
-        "4. If successful, display the visualization. "
-        "5. If unsuccessful, display the error, revise the code, and rerun it, following these steps again. ",
+        # "2. Show the code to the user to demonstrate your process. "
+        "2. Run the code to ensure it works. "
+        "3. If successful, display the visualization. "
+        "4. If unsuccessful, display the error, revise the code, and rerun it, following these steps again. ",
     )
 
     tools_list = [
@@ -76,7 +78,10 @@ def initialize(sales_data: SalesData, api_key: str):
         api_version=AZURE_OPENAI_API_VERSION,
     )
 
-    assistant = sync_openai_client.beta.assistants.create(
+    assistant = sync_openai_client.beta.assistants.retrieve(assistant_id=AZURE_OPENAI_ASSISTANT_ID)
+
+    sync_openai_client.beta.assistants.update(
+        assistant_id=assistant.id,
         name="Portfolio Management Assistant",
         model=AZURE_OPENAI_DEPLOYMENT,
         instructions=str(instructions),
@@ -164,13 +169,17 @@ async def start_chat():
         # Update session state
         cl.user_session.set("openai-client", async_openai_client)
         cl.user_session.set("thread_id", thread.id)
+
     except Exception as e:
         cl.user_session.set("openai-client", None)
         cl.user_session.set("thread_id", None)
         await cl.Message(content=e.response.reason_phrase).send()
         return
 
-    # await cl.Message(content=f"Hello, I'm {assistant.name}!").send()
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict):
+    await start_chat()
 
 
 @cl.on_chat_end
@@ -190,7 +199,6 @@ async def end_chat() -> None:
 async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
     async_openai_client = cl.user_session.get("openai-client")
-    run_id = None
 
     if not thread_id or not async_openai_client:
         await cl.Message(content="An error occurred. Please try again later.").send()
@@ -217,16 +225,21 @@ async def main(message: cl.Message) -> None:
         ) as stream:
             await stream.until_done()
 
-        run_id = stream.current_run.id  # Assuming stream has a run_id attribute
-        print(f"Run ID: {run_id}")
-
     except Exception as e:
         await cl.Message(content=f"An error occurred: {e}").send()
         await cl.Message(content="Please try again in a moment.").send()
     finally:
+        # look to cancel the run if it's not completed
+        # For example the user has ended the chat
         if stream and stream.current_run and stream.current_run.status != "completed":
-            await async_openai_client.beta.threads.runs.cancel(
-                run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-            )
-            print(f"Run cancelled. {stream.current_run.id}")
-            await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+            try:
+                # Given the async nature of the Assistant REST APIs
+                # It's possible that the run has completed but might be reported as not completed.
+                # This will cause an exception. Just ignore it.
+                await async_openai_client.beta.threads.runs.cancel(
+                    run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+                )
+                print(f"Run cancelled. {stream.current_run.id}")
+                await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+            except Exception:
+                pass
