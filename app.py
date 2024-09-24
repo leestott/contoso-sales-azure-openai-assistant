@@ -23,6 +23,43 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 AZURE_OPENAI_ASSISTANT_ID = os.getenv("AZURE_OPENAI_ASSISTANT_ID")
 
 assistant = None
+sales_data = SalesData()
+cl.instrument_openai()
+
+function_map: Dict[str, Callable[[Any], str]] = {
+    "ask_database": lambda args: sales_data.ask_database(query=args.get("query")),
+}
+
+
+def get_openai_client():
+    metadata = cl.user_session.get("user").metadata
+    api_key = metadata.get("api_key")
+
+    return AsyncAzureOpenAI(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=api_key,
+        api_version=AZURE_OPENAI_API_VERSION,
+    )
+
+
+async def authenticate_api_key(api_key: str):
+    url = f"{AZURE_OPENAI_ENDPOINT}/eventinfo"
+    headers = {"api-key": api_key}
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers)
+    if response.status_code == 200:
+        return response.text
+    return None
+
+
+@cl.password_auth_callback
+async def auth_callback(username: str, password: str):
+    event_response = await authenticate_api_key(password)
+    if event_response:
+        event_settings = json.loads(event_response)
+        event_settings.update({"api_key": password})
+        return cl.User(identifier=username, metadata=event_settings)
+    return None
 
 
 def initialize(sales_data: SalesData, api_key: str):
@@ -36,13 +73,13 @@ def initialize(sales_data: SalesData, api_key: str):
         "If a query is unrelated to sales or beyond your scope, respond with: 'I'm unable to assist with that. Please contact IT for further assistance.'",
         "In cases of aggressive or rude behavior, remain calm and professional. Respond with: 'I'm here to help with sales data inquiries. For other issues, please contact IT.'",
         "You have access to a sandboxed environment for writing and testing code.",
-        "Display data in table format unless the user explicitly requests a visualization.",
+        "Display data in markdown table format unless the user explicitly requests a visualization.",
         "Ensure that all visualizations and responses are presented in the same language as the user's question.",
         "When asked to create a visualization, follow these steps:",
         "1. Write the necessary code.",
         "2. Run the code to verify it works.",
         "3. If successful, display the visualization.",
-        "4. If unsuccessful, display the error, revise the code, and repeat the process."
+        "4. If unsuccessful, display the error, revise the code, and repeat the process.",
     )
 
     tools_list = [
@@ -118,37 +155,6 @@ async def set_starters():
     ]
 
 
-async def authenticate_api_key(api_key: str):
-    url = f"{AZURE_OPENAI_ENDPOINT}/eventinfo"
-    headers = {"api-key": api_key}
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers)
-    if response.status_code == 200:
-        return response.text
-    return None
-
-
-@cl.password_auth_callback
-async def auth_callback(username: str, password: str):
-    event_response = await authenticate_api_key(password)
-    if event_response:
-        event_settings = json.loads(event_response)
-        event_settings.update({"api_key": password})
-        user = cl.User(identifier=username, metadata=event_settings)
-        return user
-    return None
-
-
-sales_data = SalesData()
-
-cl.instrument_openai()
-
-
-function_map: Dict[str, Callable[[Any], str]] = {
-    "ask_database": lambda args: sales_data.ask_database(query=args.get("query")),
-}
-
-
 @cl.on_chat_start
 async def start_chat():
     global assistant
@@ -159,19 +165,13 @@ async def start_chat():
         if assistant is None:
             assistant = initialize(sales_data=sales_data, api_key=api_key)
 
-        async_openai_client = AsyncAzureOpenAI(
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
-        )
-        thread = await async_openai_client.beta.threads.create()
-
-        # Update session state
-        cl.user_session.set("openai-client", async_openai_client)
-        cl.user_session.set("thread_id", thread.id)
+        async_openai_client = get_openai_client()
+        thread_id = cl.user_session.get("thread_id")
+        if not thread_id:
+            thread = await async_openai_client.beta.threads.create()
+            cl.user_session.set("thread_id", thread.id)
 
     except Exception as e:
-        cl.user_session.set("openai-client", None)
         cl.user_session.set("thread_id", None)
         await cl.Message(content=e.response.reason_phrase).send()
         return
@@ -182,32 +182,10 @@ async def on_chat_resume(thread: ThreadDict):
     await start_chat()
 
 
-@cl.on_chat_end
-async def end_chat() -> None:
-    async_openai_client = cl.user_session.get("openai-client")
-    thread_id = cl.user_session.get("thread_id")
-    if thread_id and async_openai_client:
-        try:
-            await async_openai_client.beta.threads.delete(thread_id=thread_id)
-        except Exception as e:
-            print(f"Error deleting thread: {e}")
-        finally:
-            cl.user_session.set("openai-client", None)
-
-
 @cl.on_message
 async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
-    async_openai_client = cl.user_session.get("openai-client")
-
-    metadata = cl.user_session.get("user").metadata
-    api_key = metadata.get("api_key")
-
-    async_openai_client = AsyncAzureOpenAI(
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
-            api_key=api_key,
-            api_version=AZURE_OPENAI_API_VERSION,
-        )
+    async_openai_client = get_openai_client()
 
     if not thread_id or not async_openai_client:
         await cl.Message(content="An error occurred. Please try again later.").send()
@@ -230,8 +208,7 @@ async def main(message: cl.Message) -> None:
                 assistant_name=assistant.name,
                 async_openai_client=async_openai_client,
             ),
-            parallel_tool_calls=False,  # Disable parallel tool calls
-            temperature=0.4,
+            # temperature=0.4,
         ) as stream:
             await stream.until_done()
 

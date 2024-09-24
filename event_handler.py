@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing_extensions import override
 from openai import AsyncAssistantEventHandler
 from openai.types.beta.threads.runs.function_tool_call import FunctionToolCall
@@ -18,6 +19,14 @@ class EventHandler(AsyncAssistantEventHandler):
         self.async_openai_client = async_openai_client
         self.function_map = function_map
 
+    async def get_file_annotation(self, annotation)-> tuple:
+        if file_path := getattr(annotation, "file_path", None):
+            file_name = annotation.text.split("/")[-1]
+            content = await self.async_openai_client.files.content(file_path.file_id)
+            return content.content, file_name
+
+        return None, None
+
     @override
     async def on_text_created(self: "EventHandler", text) -> None:
         self.current_message = await cl.Message(author=self.assistant_name, content="").send()
@@ -29,26 +38,47 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_text_done(self: "EventHandler", text: str) -> None:
+        format_text = None
+        for annotation in text.annotations:
+            if annotation.file_path:
+                await self.current_message.remove()
+                await self.current_message.update()
+                format_text, file_name = await self.get_file_annotation(annotation)
+                break
+
+        if format_text is not None:
+            # Remove markdown links
+            text_value = re.sub(r"\[(.*?)\]\s*\(\s*.*?\s*\)", r"\1", text.value)
+            elements = [
+                cl.File(
+                    name=file_name,
+                    content=format_text,
+                    display="inline",
+                ),
+            ]
+            await cl.Message(content=text_value, elements=elements).send()
+
         await self.current_message.update()
 
     @override
     async def on_tool_call_created(self: "EventHandler", tool_call: FunctionToolCall) -> None:
-        self.current_tool_call = tool_call.id
-        self.current_step = cl.Step(name=tool_call.type, type="tool")
-        self.current_step.language = "python"
-        self.current_step.created_at = utc_now()
-        await self.current_step.send()
+        if tool_call.type == "code_interpreter":
+            self.current_tool_call = tool_call.id
+            self.current_step = cl.Step(name=tool_call.type, type="tool")
+            self.current_step.language = "python"
+            self.current_step.created_at = utc_now()
+            await self.current_step.send()
 
     @override
     async def on_tool_call_delta(self, delta, snapshot):
-        if snapshot.id != self.current_tool_call:
-            self.current_tool_call = snapshot.id
-            self.current_step = cl.Step(name=delta.type, type="tool")
-            self.current_step.language = "python"
-            self.current_step.start = utc_now()
-            await self.current_step.send()
-
         if delta.type == "code_interpreter":
+            if snapshot.id != self.current_tool_call:
+                self.current_tool_call = snapshot.id
+                self.current_step = cl.Step(name=delta.type, type="tool")
+                self.current_step.language = "python"
+                self.current_step.start = utc_now()
+                await self.current_step.send()
+
             if delta.code_interpreter.input:
                 await self.current_step.stream_token(delta.code_interpreter.input)
             if delta.code_interpreter.outputs:
@@ -68,22 +98,26 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
-
-        if tool_call.type == "function":
+        if tool_call.type == "function" and self.current_run.status == "requires_action":
             try:
-                function = self.function_map.get(tool_call.function.name)
-                arguments = json.loads(tool_call.function.arguments)
+                tool_calls = self.current_run.required_action.submit_tool_outputs.tool_calls
+                tool_outputs = []
+                for submit_tool_call in tool_calls:
+                    function = self.function_map.get(submit_tool_call.function.name)
+                    arguments = json.loads(submit_tool_call.function.arguments)
+                    result: QueryResults = function(arguments)
+                    tool_outputs.append({"tool_call_id": submit_tool_call.id, "output": result.json_format})
 
-                result: QueryResults = function(arguments)
+                    # Update the UI with the step function output
+                    current_step = cl.Step(name="function", type="tool")
+                    current_step.language = "sql"
+                    await current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
+                    await current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
+                    await current_step.stream_token(result.display_format)
+                    current_step.start = utc_now()
+                    await current_step.send()
 
-                self.current_step.language = "sql"
-                await self.current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
-                await self.current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
-                await self.current_step.stream_token(result.display_format)
-
-                self.current_message = await cl.Message(author=self.assistant_name, content="").send()
-
-                tool_outputs = [{"tool_call_id": tool_call.id, "output": result.json_format}]
+                    self.current_message = await cl.Message(author=self.assistant_name, content="").send()
 
                 async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
@@ -106,11 +140,11 @@ class EventHandler(AsyncAssistantEventHandler):
                         run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
                     )
                     await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
-                    # break
+
             except Exception as e:
                 await cl.Message(content=f"An error occurred: {e}").send()
                 await cl.Message(content="Please try again in a moment.").send()
-                # break
 
-        self.current_step.end = utc_now()
-        await self.current_step.update()
+        elif tool_call.type == "code_interpreter":
+            self.current_step.end = utc_now()
+            await self.current_step.update()
