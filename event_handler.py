@@ -45,14 +45,9 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_text_done(self: "EventHandler", text: str) -> None:
-        format_text = None
-
         for annotation in text.annotations:
             if annotation.file_path:
                 format_text, file_name = await self.get_file_annotation(annotation)
-
-                # Remove markdown links
-                # text_value = re.sub(r"\[(.*?)\]\s*\(\s*.*?\s*\)", r"\1", text.value)
                 elements = [
                     cl.File(
                         name=file_name,
@@ -60,7 +55,6 @@ class EventHandler(AsyncAssistantEventHandler):
                         display="inline",
                     ),
                 ]
-                # text.value = ""
                 await cl.Message(content="", elements=elements).send()
 
         await self.current_message.update()
