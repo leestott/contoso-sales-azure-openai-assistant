@@ -8,6 +8,8 @@ import chainlit as cl
 from literalai.helper import utc_now
 from sales_data import QueryResults
 
+pattern = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
+
 
 class EventHandler(AsyncAssistantEventHandler):
     def __init__(self, function_map: dict, assistant_name: str, async_openai_client) -> None:
@@ -19,7 +21,7 @@ class EventHandler(AsyncAssistantEventHandler):
         self.async_openai_client = async_openai_client
         self.function_map = function_map
 
-    async def get_file_annotation(self, annotation)-> tuple:
+    async def get_file_annotation(self, annotation) -> tuple:
         if file_path := getattr(annotation, "file_path", None):
             file_name = annotation.text.split("/")[-1]
             content = await self.async_openai_client.files.content(file_path.file_id)
@@ -33,30 +35,33 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_text_delta(self: "EventHandler", delta, snapshot):
-        if delta.value:
+        if snapshot.value and pattern.search(snapshot.value):
+            await self.current_message.remove()
+            snapshot.value = pattern.sub(r"\1", snapshot.value)
+            await cl.Message(content=snapshot.value).send()
+
+        elif delta.value:
             await self.current_message.stream_token(delta.value)
 
     @override
     async def on_text_done(self: "EventHandler", text: str) -> None:
         format_text = None
+
         for annotation in text.annotations:
             if annotation.file_path:
-                await self.current_message.remove()
-                await self.current_message.update()
                 format_text, file_name = await self.get_file_annotation(annotation)
-                break
 
-        if format_text is not None:
-            # Remove markdown links
-            text_value = re.sub(r"\[(.*?)\]\s*\(\s*.*?\s*\)", r"\1", text.value)
-            elements = [
-                cl.File(
-                    name=file_name,
-                    content=format_text,
-                    display="inline",
-                ),
-            ]
-            await cl.Message(content=text_value, elements=elements).send()
+                # Remove markdown links
+                # text_value = re.sub(r"\[(.*?)\]\s*\(\s*.*?\s*\)", r"\1", text.value)
+                elements = [
+                    cl.File(
+                        name=file_name,
+                        content=format_text,
+                        display="inline",
+                    ),
+                ]
+                # text.value = ""
+                await cl.Message(content="", elements=elements).send()
 
         await self.current_message.update()
 
