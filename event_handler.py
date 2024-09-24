@@ -8,7 +8,7 @@ import chainlit as cl
 from literalai.helper import utc_now
 from sales_data import QueryResults
 
-pattern = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
+markdown_link = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
 
 
 class EventHandler(AsyncAssistantEventHandler):
@@ -35,11 +35,10 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_text_delta(self: "EventHandler", delta, snapshot):
-        if snapshot.value and pattern.search(snapshot.value):
+        if snapshot.value and markdown_link.search(snapshot.value):
             await self.current_message.remove()
-            snapshot.value = pattern.sub(r"\1", snapshot.value)
+            snapshot.value = markdown_link.sub(r"\1", snapshot.value)
             await cl.Message(content=snapshot.value).send()
-
         elif delta.value:
             await self.current_message.stream_token(delta.value)
 
