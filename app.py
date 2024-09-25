@@ -9,6 +9,7 @@ from chainlit.types import ThreadDict
 from openai import AsyncAzureOpenAI, AzureOpenAI
 from dotenv import load_dotenv
 import httpx
+import openai
 
 from event_handler import EventHandler
 from sales_data import SalesData
@@ -80,7 +81,7 @@ def initialize(sales_data: SalesData, api_key: str):
         "1. Write the required code.",
         "2. Run the code to ensure it works.",
         "3. Display the visualization if successful.",
-        "4. If an error occurs, display it, revise the code, and try again."
+        "4. If an error occurs, display it, revise the code, and try again.",
     )
 
     tools_list = [
@@ -110,24 +111,31 @@ def initialize(sales_data: SalesData, api_key: str):
         },
     ]
 
-    sync_openai_client = AzureOpenAI(
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        api_key=api_key,
-        api_version=AZURE_OPENAI_API_VERSION,
-    )
+    try:
+        sync_openai_client = AzureOpenAI(
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=api_key,
+            api_version=AZURE_OPENAI_API_VERSION,
+        )
 
-    assistant = sync_openai_client.beta.assistants.retrieve(assistant_id=AZURE_OPENAI_ASSISTANT_ID)
+        assistant = sync_openai_client.beta.assistants.retrieve(assistant_id=AZURE_OPENAI_ASSISTANT_ID)
 
-    sync_openai_client.beta.assistants.update(
-        assistant_id=assistant.id,
-        name="Portfolio Management Assistant",
-        model=AZURE_OPENAI_DEPLOYMENT,
-        instructions=str(instructions),
-        tools=tools_list,
-    )
+        sync_openai_client.beta.assistants.update(
+            assistant_id=assistant.id,
+            name="Portfolio Management Assistant",
+            model=AZURE_OPENAI_DEPLOYMENT,
+            instructions=str(instructions),
+            tools=tools_list,
+        )
 
-    config.ui.name = assistant.name
-    return assistant
+        config.ui.name = assistant.name
+        return assistant
+    except openai.NotFoundError as e:
+        print(e)
+        return None
+    except Exception as e:
+        print(e)
+        return None
 
 
 @cl.set_starters
