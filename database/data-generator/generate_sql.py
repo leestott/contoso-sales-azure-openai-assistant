@@ -153,10 +153,10 @@ def generate_sql_insert():
         number_of_orders = random.randint(1, 20) * growth_factor
         revenue = random.randint(price_range[0], price_range[1]) * number_of_orders
 
-        shipping_cost_percentage = random.randint(10, 20) / 100.0 * growth_factor
+        shipping_cost_percentage = random.randint(10, 20) / 100.0
         shipping_cost = shipping_cost_percentage * revenue
 
-        discount_percentage = random.randint(0, 15) * growth_factor
+        discount_percentage = random.randint(0, 15)
         discount_decimal = discount_percentage / 100.0
         discount = discount_decimal * revenue
 
