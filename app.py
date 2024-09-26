@@ -78,6 +78,7 @@ async def initialize(sales_data: SalesData, api_key: str):
         "You have access to a sandboxed environment for writing and testing code.",
         "Present data in markdown tables unless the user explicitly requests visualizations.",
         "Ensure all responses and visualizations match the language of the user's question.",
+        "Do not include markdown links to visualizations in your responses under any circumstances.",
         "For download requests, respond with: 'The download link is provided below.'",
         "For visualizations, follow these steps:",
         "1. Write the required code.",
