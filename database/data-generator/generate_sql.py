@@ -10,7 +10,7 @@ main_categories = {
         "UNDERWEAR & BASE LAYERS": [10, 50],
         "FOOTWEAR ACCESSORIES": [5, 50],  # Added
         "OUTERWEAR": [60, 300],  # Added
-        "GLOVES & HATS": [10, 50]  # Added
+        "GLOVES & HATS": [10, 50],  # Added
     },
     "CAMPING & HIKING": {
         "BACKPACKING TENTS": [100, 500],
@@ -32,7 +32,7 @@ main_categories = {
         "UTENSILS & ACCESSORIES": [5, 50],
         "WATER FILTRATION & PURIFICATION": [10, 100],  # Added
         "NAVIGATION TOOLS": [20, 150],  # Added
-        "FIRST AID KITS": [10, 60]  # Added
+        "FIRST AID KITS": [10, 60],  # Added
     },
     "CLIMBING": {
         "AVALANCHE SAFETY": [100, 500],
@@ -48,7 +48,7 @@ main_categories = {
         "ROPES & SLINGS": [30, 300],
         "TRAINING EQUIPMENT": [20, 150],
         "SLACKLINES": [30, 150],  # Added
-        "BOULDERING PADS": [100, 400]  # Added
+        "BOULDERING PADS": [100, 400],  # Added
     },
     "FOOTWEAR": {
         "HIKING BOOTS": [60, 250],
@@ -57,7 +57,7 @@ main_categories = {
         "TRAIL SHOES": [50, 150],
         "WINTER BOOTS": [60, 200],
         "INSULATED FOOTWEAR": [80, 250],  # Added
-        "FOOTWEAR CARE PRODUCTS": [5, 30]  # Added
+        "FOOTWEAR CARE PRODUCTS": [5, 30],  # Added
     },
     "TRAVEL": {
         "CARRY-ONS": [50, 200],
@@ -70,7 +70,7 @@ main_categories = {
         "TRAVEL BACKPACKS": [30, 200],
         "TRAVEL PILLOWS": [10, 40],
         "TECH ORGANIZERS": [15, 60],  # Added
-        "LUGGAGE LOCKS": [5, 20]  # Added
+        "LUGGAGE LOCKS": [5, 20],  # Added
     },
     "WATER GEAR": {
         "ACCESSORIES": [10, 50],
@@ -84,7 +84,7 @@ main_categories = {
         "WETSUITS": [250, 500],
         "DRY BAGS": [20, 100],
         "SNORKELING & DIVING GEAR": [30, 800],
-        "SWIMWEAR": [20, 80]
+        "SWIMWEAR": [20, 80],
     },
     "FISHING GEAR": {
         "RODS & REELS": [30, 200],
@@ -94,7 +94,7 @@ main_categories = {
         "ACCESSORIES": [10, 100],
         "FISHING LINE": [10, 50],
         "FISHING HOOKS": [5, 30],
-        "FISHING BAIT": [5, 50]
+        "FISHING BAIT": [5, 50],
     },
     "WINTER SPORTS": {
         "ACCESSORIES": [10, 100],
@@ -111,34 +111,55 @@ main_categories = {
         "SNOWSHOES": [50, 200],
         "GOGGLES": [150, 250],  # Added
         "THERMAL UNDERWEAR": [30, 100],  # Added
-        "GLOVES & MITTENS": [50, 150]  # Added
-    }
+        "GLOVES & MITTENS": [50, 150],  # Added
+    },
 }
 
-regions = ['AFRICA', 'ASIA-PACIFIC', 'EUROPE', 'EUROPE', 'MIDDLE EAST', 'NORTH AMERICA', 'NORTH AMERICA', 'NORTH AMERICA', 'LATIN AMERICA', "CHINA", "CHINA"]
-years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+regions = [
+    "AFRICA",
+    "ASIA-PACIFIC",
+    "EUROPE",
+    "EUROPE",
+    "MIDDLE EAST",
+    "NORTH AMERICA",
+    "NORTH AMERICA",
+    "NORTH AMERICA",
+    "LATIN AMERICA",
+    "CHINA",
+    "CHINA",
+]
+# years = [2020, 2021, 2022, 2023, 2024]
+# growth_factors = [1.0, 1.05, 1.1, 1.15, 1.2]
+
+
+years_growth = [(2020, 1.0), (2021, 1.02), (2022, .98), (2023, 1.05), (2024, 1.10)]
+
 
 def generate_sql_insert():
     insert_statements = []
 
-    for i in range(30000):
+    for _ in range(10000):
+        yg = random.choice(years_growth)
+        growth_factor = yg[1]
+        year = yg[0]
+        month = random.randint(1, 12)
+        region = random.choice(regions)
+
         main_category = random.choice(list(main_categories.keys()))
         product_category = main_categories[main_category]
         product_type = random.choice(list(product_category.keys()))
         price_range = product_category[product_type]
-        number_of_orders = random.randint(1, 20)
+
+        number_of_orders = random.randint(1, 20) * growth_factor
         revenue = random.randint(price_range[0], price_range[1]) * number_of_orders
 
-        shipping_cost_percentage = random.randint(10, 20) / 100.0
+        shipping_cost_percentage = random.randint(10, 20) / 100.0 * growth_factor
         shipping_cost = shipping_cost_percentage * revenue
 
-        discount_percentage = random.randint(0, 15)
+        discount_percentage = random.randint(0, 15) * growth_factor
         discount_decimal = discount_percentage / 100.0
         discount = discount_decimal * revenue
 
-        year = random.choice(years)
-        month = random.randint(1, 12)
-        region = random.choice(regions)
         month_date = f"{year}-{str(month).zfill(2)}"
 
         insert_statements.append(
@@ -147,6 +168,7 @@ def generate_sql_insert():
         )
 
     return "\n".join(insert_statements)
+
 
 sql_script = f"""
 -- Create the table
