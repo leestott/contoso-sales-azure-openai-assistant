@@ -103,7 +103,7 @@ class EventHandler(AsyncAssistantEventHandler):
                 for submit_tool_call in tool_calls:
                     function = self.function_map.get(submit_tool_call.function.name)
                     arguments = json.loads(submit_tool_call.function.arguments)
-                    result: QueryResults = function(arguments)
+                    result: QueryResults = await function(arguments)
                     tool_outputs.append({"tool_call_id": submit_tool_call.id, "output": result.json_format})
 
                     # Update the UI with the step function output

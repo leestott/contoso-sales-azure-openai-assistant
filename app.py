@@ -63,8 +63,10 @@ async def auth_callback(username: str, password: str):
     return None
 
 
-def initialize(sales_data: SalesData, api_key: str):
-    database_schema_string = sales_data.get_database_info()
+async def initialize(sales_data: SalesData, api_key: str):
+
+    await sales_data.connect()
+    database_schema_string = await sales_data.get_database_info()
 
     instructions = (
         "You are a Contoso sales analysis assistant. Assist users with sales data inquiries politely, professionally, and with brief explanations.",
@@ -147,18 +149,18 @@ async def set_starters():
             icon="/public/idea.svg",
         ),
         cl.Starter(
-            label="Can you provide a monthly revenue breakdown for winter sports products in 2023 as a chart. Use vivid colors for the chart.",
-            message="Can you provide a monthly revenue breakdown for winter sports products in 2023 as a chart. Use vivid colors for the chart.",
+            label="Create a chart of monthly revenue for winter sports products in 2022 in Europe, using vibrant colors.",
+            message="Create a chart of monthly revenue for winter sports products in 2022 in Europe, using vibrant colors.",
             icon="/public/learn.svg",
         ),
         cl.Starter(
-            label="Kunt u een uitsplitsing geven van de maandelijkse inkomsten voor wintersportproducten in 2023? Weergeven als staafdiagram met levendige kleuren.",
-            message="Kunt u een uitsplitsing geven van de maandelijkse inkomsten voor wintersportproducten in 2023? Weergeven als staafdiagram met levendige kleuren.",
+            label="Staafdiagram van maandelijkse inkomsten voor wintersportproducten in 2023 met levendige kleuren.",
+            message="Staafdiagram van maandelijkse inkomsten voor wintersportproducten in 2023 met levendige kleuren.",
             icon="/public/terminal.svg",
         ),
         cl.Starter(
-            label="2023 年におけるウィンタースポーツ製品の月次売上高内訳を教えてください。鮮やかな色を使った棒グラフで表示してください。",
-            message="2023 年におけるウィンタースポーツ製品の月次売上高内訳を教えてください。鮮やかな色を使った棒グラフで表示してください。",
+            label="Download excel file for sales by category",
+            message="Download excel file for sales by category",
             icon="/public/write.svg",
         ),
     ]
@@ -172,7 +174,7 @@ async def start_chat():
         api_key = metadata.get("api_key")
 
         if assistant is None:
-            assistant = initialize(sales_data=sales_data, api_key=api_key)
+            assistant = await initialize(sales_data=sales_data, api_key=api_key)
 
         async_openai_client = get_openai_client()
         thread_id = cl.user_session.get("thread_id")
@@ -217,7 +219,7 @@ async def main(message: cl.Message) -> None:
                 assistant_name=assistant.name,
                 async_openai_client=async_openai_client,
             ),
-            # temperature=0.4,
+            temperature=0.4,
         ) as stream:
             await stream.until_done()
 

@@ -1,4 +1,4 @@
-import sqlite3
+import aiosqlite
 import pandas as pd
 import json
 from pydantic import BaseModel
@@ -13,56 +13,68 @@ class QueryResults(BaseModel):
 
 class SalesData:
     def __init__(self: "SalesData") -> None:
-        self.conn = sqlite3.connect(DATA_BASE)
+        self.conn = None
 
-    def __get_table_names(self: "SalesData") -> list:
+    async def connect(self):
+        db_uri = f"file:{DATA_BASE}?mode=ro"
+        try:
+            self.conn = await aiosqlite.connect(db_uri, uri=True)
+            print("Database connection opened.")
+        except aiosqlite.Error as e:
+            print(f"An error occurred: {e}")
+            self.conn = None
+
+    async def close(self):
+        if self.conn:
+            await self.conn.close()
+            print("Database connection closed.")
+
+    async def __get_table_names(self: "SalesData") -> list:
         """Return a list of table names."""
         table_names = []
-        tables = self.conn.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        for table in tables.fetchall():
-            if table[0] != "sqlite_sequence":
-                table_names.append(table[0])
+        async with self.conn.execute("SELECT name FROM sqlite_master WHERE type='table';") as tables:
+            async for table in tables:
+                if table[0] != "sqlite_sequence":
+                    table_names.append(table[0])
         return table_names
 
-    def __get_column_info(self: "SalesData", table_name: str) -> list:
+    async def __get_column_info(self: "SalesData", table_name: str) -> list:
         """Return a list of tuples containing column names and their types."""
         column_info = []
-        columns = self.conn.execute(f"PRAGMA table_info('{table_name}');").fetchall()
-        for col in columns:
-            column_info.append(f"{col[1]}: {col[2]}")  # col[1] is the column name, col[2] is the column type
+        async with self.conn.execute(f"PRAGMA table_info('{table_name}');") as columns:
+            async for col in columns:
+                column_info.append(f"{col[1]}: {col[2]}")  # col[1] is the column name, col[2] is the column type
         return column_info
 
-    def __get_regions(self: "SalesData") -> list:
+    async def __get_regions(self: "SalesData") -> list:
         """Return a list of unique regions in the database."""
-        regions = self.conn.execute("SELECT DISTINCT region FROM sales_data;").fetchall()
-        # convert list of tuples to list of strings
-        return [region[0] for region in regions]
+        async with self.conn.execute("SELECT DISTINCT region FROM sales_data;") as regions:
+            result = await regions.fetchall()
+        return [region[0] for region in result]
 
-
-    def __get_product_types(self: "SalesData") -> list:
+    async def __get_product_types(self: "SalesData") -> list:
         """Return a list of unique product types in the database."""
-        product_types = self.conn.execute("SELECT DISTINCT product_type FROM sales_data;").fetchall()
-        # convert list of tuples to list of strings
-        return [product_type[0] for product_type in product_types]
+        async with self.conn.execute("SELECT DISTINCT product_type FROM sales_data;") as product_types:
+            result = await product_types.fetchall()
+        return [product_type[0] for product_type in result]
 
-    def __get_product_categories(self: "SalesData")-> list:
+    async def __get_product_categories(self: "SalesData") -> list:
         """Return a list of unique product categories in the database."""
-        product_categories = self.conn.execute("SELECT DISTINCT main_category FROM sales_data;").fetchall()
-        # convert list of tuples to list of strings
-        return [product_category[0] for product_category in product_categories]
+        async with self.conn.execute("SELECT DISTINCT main_category FROM sales_data;") as product_categories:
+            result = await product_categories.fetchall()
+        return [product_category[0] for product_category in result]
 
-
-    def __get_reporting_years(self: "SalesData") -> list:
+    async def __get_reporting_years(self: "SalesData") -> list:
         """Return a list of unique reporting years in the database."""
-        reporting_years = self.conn.execute("SELECT DISTINCT year FROM sales_data ORDER BY year;").fetchall()
-        # convert list of tuples to list of strings
-        return [str(reporting_year[0]) for reporting_year in reporting_years]
+        async with self.conn.execute("SELECT DISTINCT year FROM sales_data ORDER BY year;") as reporting_years:
+            result = await reporting_years.fetchall()
+        return [str(reporting_year[0]) for reporting_year in result]
 
-    def get_database_info(self: "SalesData") -> str:
+    async def get_database_info(self: "SalesData") -> str:
         """Return a string containing the database schema information and common query fields."""
         table_dicts = []
-        for table_name in self.__get_table_names():
-            columns_names = self.__get_column_info(table_name)
+        for table_name in await self.__get_table_names():
+            columns_names = await self.__get_column_info(table_name)
             table_dicts.append({"table_name": table_name, "column_names": columns_names})
 
         database_info = "\n".join(
@@ -71,10 +83,10 @@ class SalesData:
                 for table in table_dicts
             ]
         )
-        regions = self.__get_regions()
-        product_types = self.__get_product_types()
-        product_categories = self.__get_product_categories()
-        reporting_years = self.__get_reporting_years()
+        regions = await self.__get_regions()
+        product_types = await self.__get_product_types()
+        product_categories = await self.__get_product_categories()
+        reporting_years = await self.__get_reporting_years()
 
         database_info += f"\nRegions: {', '.join(regions)}"
         database_info += f"\nProduct Types: {', '.join(product_types)}"
@@ -84,22 +96,28 @@ class SalesData:
 
         return database_info
 
-    def ask_database(self: "SalesData", query: str) -> QueryResults:
+    async def ask_database(self: "SalesData", query: str) -> QueryResults:
         """Function to query SQLite database with a provided SQL query."""
-
         data_results = QueryResults()
 
         try:
-            data = pd.read_sql_query(query, self.conn)
-            if data.empty:
+            # Perform the query asynchronously
+            async with self.conn.execute(query) as cursor:
+                rows = await cursor.fetchall()
+                columns = [description[0] for description in cursor.description]
+
+            if not rows:  # No need to create DataFrame if there are no rows
                 data_results.display_format = "The query returned no results. Try a different query."
                 data_results.json_format = ""
-                return data_results
-            data_results.display_format = data.to_string()
-            table = json.dumps(data.to_json(index=False, orient="split"))
-            data_results.json_format = table
+            else:
+                # Only create DataFrame if there are rows
+                data = pd.DataFrame(rows, columns=columns)
+                data_results.display_format = data.to_string(index=False)
+                data_results.json_format = data.to_json(index=False, orient="split")
 
         except Exception as e:
-            data_results.display_format = f"query failed with error: {e}"
-            data_results.json_format = "{" + f'"error": "{e}", "query":"{query}"' + "}"
+            error_message = f"Query failed with error: {e}"
+            data_results.display_format = error_message
+            data_results.json_format = json.dumps({"error": str(e), "query": query})
+
         return data_results
