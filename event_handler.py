@@ -94,28 +94,33 @@ class EventHandler(AsyncAssistantEventHandler):
         self.current_message.elements.append(image_element)
         await self.current_message.update()
 
+    async def update_chainlit_function_ui(self, language: str, tool_call, result: QueryResults) -> None:
+        # Update the UI with the step function output
+        current_step = cl.Step(name="function", type="tool")
+        current_step.language = language
+        await current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
+        await current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
+        await current_step.stream_token(result.display_format)
+        current_step.start = utc_now()
+        await current_step.send()
+        self.current_message = await cl.Message(author=self.assistant_name, content="").send()
+
     @override
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
+        """This method is called when a tool call is done."""
+        """ Parallel tool calling is enabled by default and it's important to iterate through the tool calls. """
         if tool_call.type == "function" and self.current_run.status == "requires_action":
             try:
                 tool_calls = self.current_run.required_action.submit_tool_outputs.tool_calls
                 tool_outputs = []
+
                 for submit_tool_call in tool_calls:
                     function = self.function_map.get(submit_tool_call.function.name)
                     arguments = json.loads(submit_tool_call.function.arguments)
                     result: QueryResults = await function(arguments)
                     tool_outputs.append({"tool_call_id": submit_tool_call.id, "output": result.json_format})
 
-                    # Update the UI with the step function output
-                    current_step = cl.Step(name="function", type="tool")
-                    current_step.language = "sql"
-                    await current_step.stream_token(f"Function Name: {tool_call.function.name}\n")
-                    await current_step.stream_token(f"Function Arguments: {tool_call.function.arguments}\n\n")
-                    await current_step.stream_token(result.display_format)
-                    current_step.start = utc_now()
-                    await current_step.send()
-
-                    self.current_message = await cl.Message(author=self.assistant_name, content="").send()
+                    await self.update_chainlit_function_ui("sql", submit_tool_call, result)
 
                 async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
                     thread_id=self.current_run.thread_id,
