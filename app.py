@@ -89,6 +89,7 @@ async def initialize(sales_data: SalesData, api_key: str):
 
     tools_list = [
         {"type": "code_interpreter"},
+        {"type": "file_search"},
         {
             "type": "function",
             "function": {

@@ -9,6 +9,7 @@ from literalai.helper import utc_now
 from sales_data import QueryResults
 
 markdown_link = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
+citation = re.compile(r"【\d+:\d+†[\w\-.]+\.[\w]+】")
 
 
 class EventHandler(AsyncAssistantEventHandler):
@@ -20,14 +21,12 @@ class EventHandler(AsyncAssistantEventHandler):
         self.assistant_name = assistant_name
         self.async_openai_client = async_openai_client
         self.function_map = function_map
+        self.citations_index = 1
 
-    async def get_file_annotation(self, annotation) -> tuple:
-        if file_path := getattr(annotation, "file_path", None):
-            file_name = annotation.text.split("/")[-1]
-            content = await self.async_openai_client.files.content(file_path.file_id)
-            return content.content, file_name
-
-        return None, None
+    async def get_file_annotation(self, file_path, annotation) -> tuple:
+        file_name = annotation.text.split("/")[-1]
+        content = await self.async_openai_client.files.content(file_path.file_id)
+        return content.content, file_name
 
     @override
     async def on_text_created(self: "EventHandler", text) -> None:
@@ -39,14 +38,27 @@ class EventHandler(AsyncAssistantEventHandler):
             await self.current_message.remove()
             snapshot.value = markdown_link.sub(r"\1", snapshot.value)
             await cl.Message(content=snapshot.value).send()
+        if snapshot.value and citation.search(snapshot.value):
+            await self.current_message.remove()
+            snapshot.value = citation.sub(f"[{self.citations_index}]", snapshot.value)
+            self.citations_index += 1
+            await cl.Message(content=snapshot.value).send()
         elif delta.value:
             await self.current_message.stream_token(delta.value)
 
     @override
     async def on_text_done(self: "EventHandler", text: str) -> None:
+        citations = []
+        index = 0
         for annotation in text.annotations:
-            if annotation.file_path:
-                format_text, file_name = await self.get_file_annotation(annotation)
+            if file_citation := getattr(annotation, "file_citation", None):
+                cited_file = await self.async_openai_client.files.retrieve(file_citation.file_id)
+                print(cited_file)
+                index += 1
+                citations.append(f"[{index}] from {cited_file.filename}")
+
+            elif file_path := getattr(annotation, "file_path", None):
+                format_text, file_name = await self.get_file_annotation(file_path, annotation)
                 elements = [
                     cl.File(
                         name=file_name,
@@ -55,6 +67,9 @@ class EventHandler(AsyncAssistantEventHandler):
                     ),
                 ]
                 await cl.Message(content="", elements=elements).send()
+
+        if citations:
+            await cl.Message(content="\n".join(citations)).send()
 
         await self.current_message.update()
 
