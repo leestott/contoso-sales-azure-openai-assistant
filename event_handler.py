@@ -53,7 +53,6 @@ class EventHandler(AsyncAssistantEventHandler):
         for annotation in text.annotations:
             if file_citation := getattr(annotation, "file_citation", None):
                 cited_file = await self.async_openai_client.files.retrieve(file_citation.file_id)
-                print(cited_file)
                 index += 1
                 citations.append(f"[{index}] from {cited_file.filename}")
 
