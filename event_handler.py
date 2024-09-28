@@ -8,8 +8,8 @@ import chainlit as cl
 from literalai.helper import utc_now
 from sales_data import QueryResults
 
-markdown_link = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
-citation = re.compile(r"【\d+:\d+†[\w\-.]+\.[\w]+】")
+markdown_link_pattern = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
+citation_pattern = re.compile(r"【\d+:\d+†[\w\-.]+\.[\w]+】")
 
 
 class EventHandler(AsyncAssistantEventHandler):
@@ -34,13 +34,13 @@ class EventHandler(AsyncAssistantEventHandler):
 
     @override
     async def on_text_delta(self: "EventHandler", delta, snapshot):
-        if snapshot.value and markdown_link.search(snapshot.value):
+        if snapshot.value and markdown_link_pattern.search(snapshot.value):
             await self.current_message.remove()
-            snapshot.value = markdown_link.sub(r"\1", snapshot.value)
+            snapshot.value = markdown_link_pattern.sub(r"\1", snapshot.value)
             await cl.Message(content=snapshot.value).send()
-        if snapshot.value and citation.search(snapshot.value):
+        if snapshot.value and citation_pattern.search(snapshot.value):
             await self.current_message.remove()
-            snapshot.value = citation.sub(f"[{self.citations_index}]", snapshot.value)
+            snapshot.value = citation_pattern.sub(f"[{self.citations_index}]", snapshot.value)
             self.citations_index += 1
             await cl.Message(content=snapshot.value).send()
         elif delta.value:
