@@ -29,6 +29,10 @@ class EventHandler(AsyncAssistantEventHandler):
         return content.content, file_name
 
     @override
+    async def on_run_step_created(self, run_step):
+        cl.user_session.set("current_run", run_step)
+
+    @override
     async def on_text_created(self: "EventHandler", text) -> None:
         self.current_message = await cl.Message(author=self.assistant_name, content="").send()
 
@@ -99,7 +103,6 @@ class EventHandler(AsyncAssistantEventHandler):
                         pass
 
     async def on_image_file_done(self, image_file):
-        # async_openai_client = cl.user_session.get("openai-client")
         image_id = image_file.file_id
         response = await self.async_openai_client.files.with_raw_response.content(image_id)
         image_element = cl.Image(name=image_id, content=response.content, display="inline", size="large")
@@ -123,9 +126,9 @@ class EventHandler(AsyncAssistantEventHandler):
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
         """This method is called when a tool call is done."""
         """ Parallel tool calling is enabled by default and it's important to iterate through the tool calls. """
+
         try:
             if tool_call.type == "function" and self.current_run.status == "requires_action":
-
                 tool_calls = self.current_run.required_action.submit_tool_outputs.tool_calls
                 function_tool_calls = [call for call in tool_calls if call.type == "function"]
                 tool_outputs = []
@@ -161,16 +164,13 @@ class EventHandler(AsyncAssistantEventHandler):
 
         # triggered when the user stops a chat
         except asyncio.exceptions.CancelledError:
-            if stream and stream.current_run and stream.current_run.status != "completed":
-                await self.async_openai_client.beta.threads.runs.cancel(
-                    run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-                )
-                await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+            pass
+            # if stream and stream.current_run and stream.current_run.status != "completed":
+            #     await self.async_openai_client.beta.threads.runs.cancel(
+            #         run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+            #     )
+            #     await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
 
         except Exception as e:
             await cl.Message(content=f"An error occurred: {e}").send()
             await cl.Message(content="Please try again in a moment.").send()
-
-        # elif tool_call.type == "code_interpreter":
-        #     self.current_step.end = utc_now()
-        #     await self.current_step.update()

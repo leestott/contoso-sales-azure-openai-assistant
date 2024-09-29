@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict
 import chainlit as cl
 from chainlit.config import config
 from chainlit.types import ThreadDict
-from openai import AsyncAzureOpenAI, AzureOpenAI
+from openai import AsyncAzureOpenAI, AzureOpenAI, BadRequestError
 from dotenv import load_dotenv
 import httpx
 import openai
@@ -64,7 +64,6 @@ async def auth_callback(username: str, password: str):
 
 
 async def initialize(sales_data: SalesData, api_key: str):
-
     await sales_data.connect()
     database_schema_string = await sales_data.get_database_info()
 
@@ -197,6 +196,24 @@ async def on_chat_resume(thread: ThreadDict):
     await start_chat()
 
 
+@cl.on_stop
+async def stop_chat():
+    current_run = cl.user_session.get("current_run")
+    if current_run:
+        try:
+            thread_id = getattr(current_run, "thread_id", None)
+            run_id = getattr(current_run, "run_id", None)
+            status = getattr(current_run, "status", None)
+            async_openai_client = get_openai_client()
+            if thread_id and run_id and async_openai_client and status != "completed":
+                await async_openai_client.beta.threads.runs.cancel(run_id=run_id, thread_id=thread_id)
+                await cl.Message(content=f"Run cancelled. {run_id}").send()
+        except Exception:
+            pass
+        finally:
+            cl.user_session.set("current_run", None)
+
+
 @cl.on_message
 async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
@@ -229,11 +246,10 @@ async def main(message: cl.Message) -> None:
 
     # triggered when the user stops a chat
     except asyncio.exceptions.CancelledError:
-        if stream and stream.current_run and stream.current_run.status != "completed":
-            await async_openai_client.beta.threads.runs.cancel(
-                run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-            )
-            await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+        pass
+
+    except BadRequestError as e:
+        print(e)
 
     except Exception as e:
         await cl.Message(content=f"An error occurred: {e}").send()
