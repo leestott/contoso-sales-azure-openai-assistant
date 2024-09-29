@@ -9,7 +9,7 @@ from literalai.helper import utc_now
 from sales_data import QueryResults
 
 markdown_link_pattern = re.compile(r"\[(.*?)\]\s*\(\s*.*?\s*\)")
-citation_pattern = re.compile(r"【[^】]*】")
+citation_pattern = re.compile(r"【.*?】")
 
 
 class EventHandler(AsyncAssistantEventHandler):

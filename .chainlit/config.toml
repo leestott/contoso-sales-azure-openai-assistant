@@ -66,11 +66,11 @@ default_collapse_content = true
 cot = "full"
 
 # Link to your github repo. This will add a github button in the UI's header.
-# github = ""
+github = "https://github.com/gloveboxes/contoso-sales-azure-openai-assistant"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-# custom_css = "/public/custom.css"
+custom_css = "/public/custom.css"
 
 # Specify a Javascript file that can be used to customize the user interface.
 # The Javascript file can be served from the public directory.

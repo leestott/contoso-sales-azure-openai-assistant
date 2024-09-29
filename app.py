@@ -31,6 +31,29 @@ function_map: Dict[str, Callable[[Any], str]] = {
     "ask_database": lambda args: sales_data.ask_database(query=args.get("query")),
 }
 
+file_search_formats = [
+    ".c",
+    ".cs",
+    ".cpp",
+    ".doc",
+    ".docx",
+    ".html",
+    ".java",
+    ".json",
+    ".md",
+    ".pdf",
+    ".php",
+    ".pptx",
+    ".py",
+    ".rb",
+    ".tex",
+    ".txt",
+    ".css",
+    ".js",
+    ".sh",
+    ".ts",
+]
+
 
 def get_openai_client():
     metadata = cl.user_session.get("user").metadata
