@@ -123,12 +123,14 @@ class EventHandler(AsyncAssistantEventHandler):
     async def on_tool_call_done(self, tool_call: FunctionToolCall) -> None:
         """This method is called when a tool call is done."""
         """ Parallel tool calling is enabled by default and it's important to iterate through the tool calls. """
-        if tool_call.type == "function" and self.current_run.status == "requires_action":
-            try:
+        try:
+            if tool_call.type == "function" and self.current_run.status == "requires_action":
+
                 tool_calls = self.current_run.required_action.submit_tool_outputs.tool_calls
+                function_tool_calls = [call for call in tool_calls if call.type == "function"]
                 tool_outputs = []
 
-                for submit_tool_call in tool_calls:
+                for submit_tool_call in function_tool_calls:
                     function = self.function_map.get(submit_tool_call.function.name)
                     arguments = json.loads(submit_tool_call.function.arguments)
                     result: QueryResults = await function(arguments)
@@ -136,32 +138,39 @@ class EventHandler(AsyncAssistantEventHandler):
 
                     await self.update_chainlit_function_ui("sql", submit_tool_call, result)
 
-                async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
-                    thread_id=self.current_run.thread_id,
-                    run_id=self.current_run.id,
-                    tool_outputs=tool_outputs,
-                    event_handler=EventHandler(
-                        self.function_map,
-                        self.assistant_name,
-                        self.async_openai_client,
-                    ),
-                ) as stream:
-                    await stream.until_done()
+                if tool_outputs:
+                    async with self.async_openai_client.beta.threads.runs.submit_tool_outputs_stream(
+                        thread_id=self.current_run.thread_id,
+                        run_id=self.current_run.id,
+                        tool_outputs=tool_outputs,
+                        event_handler=EventHandler(
+                            self.function_map,
+                            self.assistant_name,
+                            self.async_openai_client,
+                        ),
+                    ) as stream:
+                        await stream.until_done()
 
-                await self.current_message.update()
+                    await self.current_message.update()
 
-            # triggered when the user stops a chat
-            except asyncio.exceptions.CancelledError:
-                if stream and stream.current_run and stream.current_run.status != "completed":
-                    await self.async_openai_client.beta.threads.runs.cancel(
-                        run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
-                    )
-                    await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
+            elif tool_call.type == "code_interpreter":
+                self.current_step.end = utc_now()
+                await self.current_step.update()
+            elif tool_call.type == "file_search":
+                pass
 
-            except Exception as e:
-                await cl.Message(content=f"An error occurred: {e}").send()
-                await cl.Message(content="Please try again in a moment.").send()
+        # triggered when the user stops a chat
+        except asyncio.exceptions.CancelledError:
+            if stream and stream.current_run and stream.current_run.status != "completed":
+                await self.async_openai_client.beta.threads.runs.cancel(
+                    run_id=stream.current_run.id, thread_id=stream.current_run.thread_id
+                )
+                await cl.Message(content=f"Run cancelled. {stream.current_run.id}").send()
 
-        elif tool_call.type == "code_interpreter":
-            self.current_step.end = utc_now()
-            await self.current_step.update()
+        except Exception as e:
+            await cl.Message(content=f"An error occurred: {e}").send()
+            await cl.Message(content="Please try again in a moment.").send()
+
+        # elif tool_call.type == "code_interpreter":
+        #     self.current_step.end = utc_now()
+        #     await self.current_step.update()
