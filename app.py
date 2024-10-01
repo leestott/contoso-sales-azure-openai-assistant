@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from typing import Any, Callable, Dict
+from pathlib import Path
 
 import chainlit as cl
 from chainlit.config import config
@@ -30,29 +31,6 @@ cl.instrument_openai()
 function_map: Dict[str, Callable[[Any], str]] = {
     "ask_database": lambda args: sales_data.ask_database(query=args.get("query")),
 }
-
-file_search_formats = [
-    ".c",
-    ".cs",
-    ".cpp",
-    ".doc",
-    ".docx",
-    ".html",
-    ".java",
-    ".json",
-    ".md",
-    ".pdf",
-    ".php",
-    ".pptx",
-    ".py",
-    ".rb",
-    ".tex",
-    ".txt",
-    ".css",
-    ".js",
-    ".sh",
-    ".ts",
-]
 
 
 def get_openai_client():
@@ -237,6 +215,24 @@ async def stop_chat():
             cl.user_session.set("current_run", None)
 
 
+async def get_attachments(message: cl.Message, async_openai_client: AsyncAzureOpenAI) -> Dict:
+    file_paths = [file.path for file in message.elements]
+    if not file_paths:
+        return None
+
+    await cl.Message(content="Uploading files.").send()
+    message_files = []
+    for path in file_paths:
+        with Path(path).open("rb") as file:
+            message_file = await async_openai_client.files.create(file=file, purpose="assistants")
+
+        message_file = {"file_id": message_file.id, "tools": [{"type": "file_search"}]}
+        message_files.append(message_file)
+
+    await cl.Message(content="Uploading completed.").send()
+    return message_files
+
+
 @cl.on_message
 async def main(message: cl.Message) -> None:
     thread_id = cl.user_session.get("thread_id")
@@ -246,12 +242,15 @@ async def main(message: cl.Message) -> None:
         await cl.Message(content="An error occurred. Please try again later.").send()
         return
 
+    message_files = await get_attachments(message, async_openai_client)
+
     try:
         # Add a Message to the Thread
         await async_openai_client.beta.threads.messages.create(
             thread_id=thread_id,
             role="user",
             content=message.content,
+            attachments=message_files,
         )
 
         # Create and Stream a Run
@@ -263,7 +262,7 @@ async def main(message: cl.Message) -> None:
                 assistant_name=assistant.name,
                 async_openai_client=async_openai_client,
             ),
-            temperature=0.4,
+            temperature=0.3,
         ) as stream:
             await stream.until_done()
 
