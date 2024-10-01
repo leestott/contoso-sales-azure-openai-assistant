@@ -135,10 +135,17 @@ class EventHandler(AsyncAssistantEventHandler):
 
                 for submit_tool_call in function_tool_calls:
                     function = self.function_map.get(submit_tool_call.function.name)
-                    arguments = json.loads(submit_tool_call.function.arguments)
-                    result: QueryResults = await function(arguments)
-                    tool_outputs.append({"tool_call_id": submit_tool_call.id, "output": result.json_format})
 
+                    try:
+                        arguments = json.loads(submit_tool_call.function.arguments)
+                        result: QueryResults = await function(arguments)
+                    except json.JSONDecodeError as e:
+                        result = QueryResults(
+                            display_format=submit_tool_call.function.arguments,
+                            json_format=str(e),
+                        )
+
+                    tool_outputs.append({"tool_call_id": submit_tool_call.id, "output": result.json_format})
                     await self.update_chainlit_function_ui("sql", submit_tool_call, result)
 
                 if tool_outputs:
