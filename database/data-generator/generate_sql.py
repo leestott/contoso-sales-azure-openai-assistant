@@ -132,13 +132,13 @@ regions = [
 # growth_factors = [1.0, 1.05, 1.1, 1.15, 1.2]
 
 
-years_growth = [(2020, 1.0), (2021, 1.02), (2022, .98), (2023, 1.05), (2024, 1.10)]
+years_growth = [(2022, .98), (2023, 1.01), (2024, 1.05)]
 
 
 def generate_sql_insert():
     insert_statements = []
 
-    for _ in range(10000):
+    for _ in range(40000):
         yg = random.choice(years_growth)
         growth_factor = yg[1]
         year = yg[0]

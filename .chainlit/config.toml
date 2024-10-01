@@ -33,10 +33,31 @@ edit_message = true
 
 # Authorize users to spontaneously upload files with messages
 [features.spontaneous_file_upload]
-    enabled = false
-    accept = ["*/*"]
-    max_files = 10
-    max_size_mb = 500
+    enabled = true
+    accept = [
+        ".c",
+        ".cs",
+        ".cpp",
+        ".doc",
+        ".docx",
+        ".html",
+        ".java",
+        ".json",
+        ".md",
+        ".pdf",
+        ".php",
+        ".pptx",
+        ".py",
+        ".rb",
+        ".tex",
+        ".txt",
+        ".css",
+        ".js",
+        ".sh",
+        ".ts"
+    ]
+    max_files = 5
+    max_size_mb = 50
 
 [features.audio]
     # Threshold for audio recording
@@ -54,16 +75,16 @@ edit_message = true
 
 [UI]
 # Name of the assistant.
-name = "Assistant"
+name = "Contoso Sales"
 
 # Description of the assistant. This is used for HTML tags.
-# description = ""
+# description = "The Contoso Sales Assistant demonstrates the use of the Azure Assistants API."
 
 # Large size content are by default collapsed for a cleaner ui
 default_collapse_content = true
 
 # Chain of Thought (CoT) display mode. Can be "hidden", "tool_call" or "full".
-cot = "full"
+cot = "hidden"
 
 # Link to your github repo. This will add a github button in the UI's header.
 github = "https://github.com/gloveboxes/contoso-sales-azure-openai-assistant"
